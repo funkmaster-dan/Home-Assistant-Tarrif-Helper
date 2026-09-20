@@ -176,7 +176,9 @@ class TariffOptionsFlow(OptionsFlow):
             selector.NumberSelectorConfig(
                 min=0,
                 max=100,
-                step=0.0001,
+                # HA's NumberSelector rejects step < 1e-3, so 0.001 is the
+                # finest granularity a rate can be entered with.
+                step=0.001,
                 mode=selector.NumberSelectorMode.BOX,
                 unit_of_measurement=f"{currency}/kWh",
             )
