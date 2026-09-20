@@ -1,11 +1,13 @@
 {
   "domain": "energy_tariff_helper",
   "name": "Energy Tariff Helper",
-  "codeowners": ["@funkmaster-dan"],
+  "codeowners": [
+    "@funkmaster-dan"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/funkmaster-dan/Home-Assistant-Tarrif-Helper",
   "issue_tracker": "https://github.com/funkmaster-dan/Home-Assistant-Tarrif-Helper/issues",
   "integration_type": "service",
   "iot_class": "calculated",
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

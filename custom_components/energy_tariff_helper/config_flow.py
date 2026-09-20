@@ -1,11 +1,13 @@
-"""Config and options flows for the Energy Tariff Helper integration.
+"""Config, options and subentry flows for the Energy Tariff Helper integration.
 
-The initial config flow names the meter. The options flow is a menu that
-manages the daily supply charge and the tariff windows using real time and
-number pickers.
+* ``ConfigFlow`` names the meter.
+* ``TariffOptionsFlow`` sets the daily supply charge.
+* ``TariffWindowSubentryFlow`` adds and edits a single tariff window. It serves
+  both directions — Home Assistant supplies the subentry type, so the same form
+  is labelled "import" or "export" from the matching translations.
 
-Import and export tariffs are separate schedules, so each direction has its own
-list of windows and its own add/edit/remove actions.
+Each window is a config subentry, which is what gives the integration page its
+add / edit / delete rows.
 """
 
 from __future__ import annotations
@@ -19,50 +21,66 @@ from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
+    ConfigSubentry,
+    ConfigSubentryFlow,
     OptionsFlow,
+    SubentryFlowResult,
 )
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_EXPORT_WINDOWS,
-    CONF_IMPORT_WINDOWS,
+    CONF_END,
     CONF_METER_NAME,
+    CONF_RATE,
+    CONF_START,
     CONF_SUPPLY_CHARGE,
-    DIRECTION_EXPORT,
-    DIRECTION_IMPORT,
     DOMAIN,
+    SUBENTRY_TYPE_EXPORT,
+    SUBENTRY_TYPE_IMPORT,
 )
-from .tariff import (
-    FIELD_END,
-    FIELD_RATE,
-    FIELD_START,
-    TariffWindow,
-    parse_windows,
-)
-
-MENU_SUPPLY = "supply_charge"
-MENU_ADD_IMPORT = "add_import_window"
-MENU_EDIT_IMPORT = "edit_import_window"
-MENU_REMOVE_IMPORT = "remove_import_window"
-MENU_ADD_EXPORT = "add_export_window"
-MENU_EDIT_EXPORT = "edit_export_window"
-MENU_REMOVE_EXPORT = "remove_export_window"
-
-_OPTION_KEY = {
-    DIRECTION_IMPORT: CONF_IMPORT_WINDOWS,
-    DIRECTION_EXPORT: CONF_EXPORT_WINDOWS,
-}
+from .tariff import TariffWindow
 
 
-def _to_time(value: str) -> time:
-    """Convert a TimeSelector value into a ``datetime.time``."""
-    return time.fromisoformat(value)
+def _window_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    """Build the window form, optionally pre-filled.
+
+    ``default`` is only attached when a value exists: a ``None`` default on a
+    required time/number selector is rejected by HA's schema serialiser.
+    """
+    defaults = defaults or {}
+    number = selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=0,
+            max=100,
+            # HA's NumberSelector rejects a step below 1e-3, so 0.001 is the
+            # finest granularity a rate can be entered with.
+            step=0.001,
+            mode=selector.NumberSelectorMode.BOX,
+        )
+    )
+
+    def field(name: str) -> Any:
+        if (value := defaults.get(name)) is None:
+            return vol.Required(name)
+        return vol.Required(name, default=value)
+
+    return vol.Schema(
+        {
+            field(CONF_START): selector.TimeSelector(),
+            field(CONF_END): selector.TimeSelector(),
+            field(CONF_RATE): number,
+        }
+    )
 
 
-def _window_label(window: TariffWindow) -> str:
-    """Return a human label for a window, used as the select option."""
-    return f"{window.start:%H:%M}-{window.end:%H:%M} (rate {window.rate:g})"
+def _to_window(user_input: dict[str, Any]) -> TariffWindow:
+    """Build a ``TariffWindow`` from submitted form data."""
+    return TariffWindow(
+        start=time.fromisoformat(user_input[CONF_START]),
+        end=time.fromisoformat(user_input[CONF_END]),
+        rate=float(user_input[CONF_RATE]),
+    )
 
 
 class ConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -97,38 +115,25 @@ class ConfigFlow(ConfigFlow, domain=DOMAIN):
         """Return the options flow."""
         return TariffOptionsFlow()
 
+    @classmethod
+    @callback
+    def async_get_supported_subentry_types(
+        cls, config_entry: ConfigEntry
+    ) -> dict[str, type[ConfigSubentryFlow]]:
+        """Return the subentry types this integration supports."""
+        return {
+            SUBENTRY_TYPE_IMPORT: TariffWindowSubentryFlow,
+            SUBENTRY_TYPE_EXPORT: TariffWindowSubentryFlow,
+        }
+
 
 class TariffOptionsFlow(OptionsFlow):
-    """Menu-driven management of the supply charge and tariff windows."""
-
-    def _windows(self, direction: str) -> list[TariffWindow]:
-        """Return the configured windows for one direction."""
-        return parse_windows(self.config_entry.options.get(_OPTION_KEY[direction]))
-
-    def _save(self, direction: str, windows: list[TariffWindow]) -> ConfigFlowResult:
-        """Persist one direction's windows, preserving the other options."""
-        options = dict(self.config_entry.options)
-        options[_OPTION_KEY[direction]] = [window.as_dict() for window in windows]
-        return self.async_create_entry(data=options)
+    """Manage the daily supply charge."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Show the options menu."""
-        menu = [MENU_SUPPLY, MENU_ADD_IMPORT, MENU_ADD_EXPORT]
-        if self._windows(DIRECTION_IMPORT):
-            menu += [MENU_EDIT_IMPORT, MENU_REMOVE_IMPORT]
-        if self._windows(DIRECTION_EXPORT):
-            menu += [MENU_EDIT_EXPORT, MENU_REMOVE_EXPORT]
-
-        return self.async_show_menu(step_id="init", menu_options=menu)
-
-    # -- supply charge -----------------------------------------------------
-
-    async def async_step_supply_charge(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Set the daily supply charge."""
+        """Ask for the daily supply charge."""
         if user_input is not None:
             options = dict(self.config_entry.options)
             options[CONF_SUPPLY_CHARGE] = user_input[CONF_SUPPLY_CHARGE]
@@ -151,220 +156,58 @@ class TariffOptionsFlow(OptionsFlow):
                 )
             }
         )
-        return self.async_show_form(step_id=MENU_SUPPLY, data_schema=schema)
+        return self.async_show_form(step_id="init", data_schema=schema)
 
-    # -- window forms ------------------------------------------------------
 
-    def _window_schema(self, defaults: dict[str, Any] | None = None) -> vol.Schema:
-        """Build the window form, optionally pre-filled.
+class TariffWindowSubentryFlow(ConfigSubentryFlow):
+    """Add or edit one tariff window.
 
-        ``default`` is only attached when a value exists: a ``None`` default on a
-        required time/number selector is rejected by HA's schema serialiser.
-        """
-        defaults = defaults or {}
-        currency = self.hass.config.currency
-        number = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0,
-                max=100,
-                # HA's NumberSelector rejects step < 1e-3, so 0.001 is the
-                # finest granularity a rate can be entered with.
-                step=0.001,
-                mode=selector.NumberSelectorMode.BOX,
-                unit_of_measurement=f"{currency}/kWh",
-            )
-        )
+    The same class backs both the import and export subentry types; Home
+    Assistant tells us which via ``self._subentry_type``, and the translations
+    for that type supply the matching labels.
+    """
 
-        def field(name: str) -> Any:
-            if (value := defaults.get(name)) is None:
-                return vol.Required(name)
-            return vol.Required(name, default=value)
-
-        return vol.Schema(
-            {
-                field(FIELD_START): selector.TimeSelector(),
-                field(FIELD_END): selector.TimeSelector(),
-                field(FIELD_RATE): number,
-            }
-        )
-
-    async def _async_add(
-        self,
-        direction: str,
-        step_id: str,
-        user_input: dict[str, Any] | None,
-    ) -> ConfigFlowResult:
-        """Add a window for one direction."""
-        if user_input is None:
-            return self.async_show_form(
-                step_id=step_id, data_schema=self._window_schema()
-            )
-
-        if user_input[FIELD_START] == user_input[FIELD_END]:
-            return self.async_show_form(
-                step_id=step_id,
-                data_schema=self._window_schema(user_input),
-                errors={"base": "zero_length_window"},
-            )
-
-        window = TariffWindow(
-            start=_to_time(user_input[FIELD_START]),
-            end=_to_time(user_input[FIELD_END]),
-            rate=float(user_input[FIELD_RATE]),
-        )
-        return self._save(direction, [*self._windows(direction), window])
-
-    async def _async_edit_pick(
-        self, direction: str, step_id: str, user_input: dict[str, Any] | None
-    ) -> ConfigFlowResult:
-        """Pick which window of a direction to edit."""
-        windows = self._windows(direction)
-        if not windows:
-            return self.async_abort(reason="no_windows")
-
-        labels = [_window_label(window) for window in windows]
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Add a window."""
         if user_input is not None:
-            self._edit_direction = direction
-            self._edit_index = labels.index(user_input["window"])
-            return await self._async_edit_details(
-                direction, f"{step_id}_details", None
-            )
-
-        return self.async_show_form(
-            step_id=step_id,
-            data_schema=vol.Schema(
-                {
-                    vol.Required("window"): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=labels,
-                            mode=selector.SelectSelectorMode.LIST,
-                        )
-                    )
-                }
-            ),
-        )
-
-    async def _async_edit_details(
-        self, direction: str, step_id: str, user_input: dict[str, Any] | None
-    ) -> ConfigFlowResult:
-        """Edit the window picked in the previous step."""
-        windows = self._windows(direction)
-        index = self._edit_index
-        window = windows[index]
-
-        if user_input is not None:
-            if user_input[FIELD_START] == user_input[FIELD_END]:
+            if user_input[CONF_START] == user_input[CONF_END]:
                 return self.async_show_form(
-                    step_id=step_id,
-                    data_schema=self._window_schema(user_input),
+                    step_id="user",
+                    data_schema=_window_schema(user_input),
                     errors={"base": "zero_length_window"},
                 )
-            updated = list(windows)
-            updated[index] = TariffWindow(
-                start=_to_time(user_input[FIELD_START]),
-                end=_to_time(user_input[FIELD_END]),
-                rate=float(user_input[FIELD_RATE]),
-            )
-            return self._save(direction, updated)
+            window = _to_window(user_input)
+            return self.async_create_entry(title=window.label, data=window.as_dict())
 
-        defaults = {
-            FIELD_START: window.start.strftime("%H:%M:%S"),
-            FIELD_END: window.end.strftime("%H:%M:%S"),
-            FIELD_RATE: window.rate,
-        }
-        return self.async_show_form(
-            step_id=step_id, data_schema=self._window_schema(defaults)
-        )
+        return self.async_show_form(step_id="user", data_schema=_window_schema())
 
-    async def _async_remove(
-        self, direction: str, step_id: str, user_input: dict[str, Any] | None
-    ) -> ConfigFlowResult:
-        """Pick which window of a direction to remove."""
-        windows = self._windows(direction)
-        if not windows:
-            return self.async_abort(reason="no_windows")
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Edit an existing window."""
+        subentry: ConfigSubentry = self._get_reconfigure_subentry()
 
-        labels = [_window_label(window) for window in windows]
         if user_input is not None:
-            index = labels.index(user_input["window"])
-            return self._save(
-                direction, [w for i, w in enumerate(windows) if i != index]
+            if user_input[CONF_START] == user_input[CONF_END]:
+                return self.async_show_form(
+                    step_id="reconfigure",
+                    data_schema=_window_schema(user_input),
+                    errors={"base": "zero_length_window"},
+                )
+            window = _to_window(user_input)
+            # async_update_and_abort, not async_update_reload_and_abort: this
+            # entry registers update listeners, which the reload variant
+            # refuses to work with. The listener rebuilds the schedule.
+            return self.async_update_and_abort(
+                self._get_entry(),
+                subentry,
+                data=window.as_dict(),
+                title=window.label,
             )
 
         return self.async_show_form(
-            step_id=step_id,
-            data_schema=vol.Schema(
-                {
-                    vol.Required("window"): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=labels,
-                            mode=selector.SelectSelectorMode.LIST,
-                        )
-                    )
-                }
-            ),
-        )
-
-    # -- import windows ----------------------------------------------------
-
-    async def async_step_add_import_window(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Add an import window."""
-        return await self._async_add(DIRECTION_IMPORT, MENU_ADD_IMPORT, user_input)
-
-    async def async_step_edit_import_window(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Edit an import window."""
-        return await self._async_edit_pick(
-            DIRECTION_IMPORT, MENU_EDIT_IMPORT, user_input
-        )
-
-    async def async_step_edit_import_window_details(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Edit the picked import window."""
-        return await self._async_edit_details(
-            DIRECTION_IMPORT, "edit_import_window_details", user_input
-        )
-
-    async def async_step_remove_import_window(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Remove an import window."""
-        return await self._async_remove(
-            DIRECTION_IMPORT, MENU_REMOVE_IMPORT, user_input
-        )
-
-    # -- export windows ----------------------------------------------------
-
-    async def async_step_add_export_window(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Add an export window."""
-        return await self._async_add(DIRECTION_EXPORT, MENU_ADD_EXPORT, user_input)
-
-    async def async_step_edit_export_window(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Edit an export window."""
-        return await self._async_edit_pick(
-            DIRECTION_EXPORT, MENU_EDIT_EXPORT, user_input
-        )
-
-    async def async_step_edit_export_window_details(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Edit the picked export window."""
-        return await self._async_edit_details(
-            DIRECTION_EXPORT, "edit_export_window_details", user_input
-        )
-
-    async def async_step_remove_export_window(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Remove an export window."""
-        return await self._async_remove(
-            DIRECTION_EXPORT, MENU_REMOVE_EXPORT, user_input
+            step_id="reconfigure",
+            data_schema=_window_schema(dict(subentry.data)),
         )

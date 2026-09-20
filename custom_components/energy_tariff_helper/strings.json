@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Energy Tariff Helper",
-        "description": "Name this meter. You'll set its tariff windows next.",
+        "description": "Name this meter. You'll add its tariff windows next.",
         "data": {
           "meter_name": "Meter name"
         }
@@ -16,94 +16,72 @@
   "options": {
     "step": {
       "init": {
-        "title": "Energy Tariff Helper",
-        "menu_options": {
-          "supply_charge": "Set the daily supply charge",
-          "add_import_window": "Add an import window",
-          "edit_import_window": "Edit an import window",
-          "remove_import_window": "Remove an import window",
-          "add_export_window": "Add an export window",
-          "edit_export_window": "Edit an export window",
-          "remove_export_window": "Remove an export window"
-        }
-      },
-      "supply_charge": {
         "title": "Daily supply charge",
-        "description": "A fixed amount billed per day, regardless of usage.",
+        "description": "A fixed amount billed per day, regardless of usage. Tariff windows are managed on the integration page.",
         "data": {
           "supply_charge": "Daily supply charge"
         }
+      }
+    }
+  },
+  "config_subentries": {
+    "import_window": {
+      "entry_type": "Import window",
+      "initiate_flow": {
+        "user": "Add import window"
       },
-      "add_import_window": {
-        "title": "Add an import window",
-        "description": "A recurring daily period when you pay this import rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
-        "data": {
-          "start": "Start time",
-          "end": "End time",
-          "rate": "Import rate"
+      "step": {
+        "user": {
+          "title": "Add import window",
+          "description": "A recurring daily period when you pay this import rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
+          "data": {
+            "start": "Start time",
+            "end": "End time",
+            "rate": "Import rate"
+          }
+        },
+        "reconfigure": {
+          "title": "Edit import window",
+          "description": "A recurring daily period when you pay this import rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
+          "data": {
+            "start": "Start time",
+            "end": "End time",
+            "rate": "Import rate"
+          }
         }
       },
-      "edit_import_window": {
-        "title": "Edit an import window",
-        "description": "Pick the import window to change.",
-        "data": {
-          "window": "Window"
-        }
-      },
-      "edit_import_window_details": {
-        "title": "Edit import window",
-        "description": "A recurring daily period when you pay this import rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
-        "data": {
-          "start": "Start time",
-          "end": "End time",
-          "rate": "Import rate"
-        }
-      },
-      "remove_import_window": {
-        "title": "Remove an import window",
-        "description": "Pick the import window to remove.",
-        "data": {
-          "window": "Window"
-        }
-      },
-      "add_export_window": {
-        "title": "Add an export window",
-        "description": "A recurring daily period when you are paid this export rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
-        "data": {
-          "start": "Start time",
-          "end": "End time",
-          "rate": "Export rate"
-        }
-      },
-      "edit_export_window": {
-        "title": "Edit an export window",
-        "description": "Pick the export window to change.",
-        "data": {
-          "window": "Window"
-        }
-      },
-      "edit_export_window_details": {
-        "title": "Edit export window",
-        "description": "A recurring daily period when you are paid this export rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
-        "data": {
-          "start": "Start time",
-          "end": "End time",
-          "rate": "Export rate"
-        }
-      },
-      "remove_export_window": {
-        "title": "Remove an export window",
-        "description": "Pick the export window to remove.",
-        "data": {
-          "window": "Window"
-        }
+      "error": {
+        "zero_length_window": "The start and end times must be different."
       }
     },
-    "error": {
-      "zero_length_window": "The start and end times must be different."
-    },
-    "abort": {
-      "no_windows": "There are no windows configured for that direction."
+    "export_window": {
+      "entry_type": "Export window",
+      "initiate_flow": {
+        "user": "Add export window"
+      },
+      "step": {
+        "user": {
+          "title": "Add export window",
+          "description": "A recurring daily period when you are paid this export rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
+          "data": {
+            "start": "Start time",
+            "end": "End time",
+            "rate": "Export rate"
+          }
+        },
+        "reconfigure": {
+          "title": "Edit export window",
+          "description": "A recurring daily period when you are paid this export rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
+          "data": {
+            "start": "Start time",
+            "end": "End time",
+            "rate": "Export rate"
+          }
+        }
+      },
+      "error": {
+        "zero_length_window": "The start and end times must be different."
+      }
     }
   },
   "entity": {

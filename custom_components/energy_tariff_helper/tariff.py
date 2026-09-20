@@ -1,7 +1,7 @@
 """Tariff schedule engine.
 
-Pure time logic: parsing a configured window list, matching an instant against
-it, and selecting the active window. No Home Assistant entity or coordinator
+Pure time logic: building windows from stored data, matching an instant against
+them, and selecting the active window. No Home Assistant entity or coordinator
 code lives here so the behaviour is testable in isolation.
 
 Import and export tariffs are independent schedules, so a window carries a
@@ -12,13 +12,14 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import time
 from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
-# Window fields as stored in the config entry options.
+# Window fields as stored on a subentry (and in the migrated options format).
 FIELD_START = "start"
 FIELD_END = "end"
 FIELD_RATE = "rate"
@@ -53,19 +54,39 @@ class TariffWindow:
             FIELD_RATE: self.rate,
         }
 
+    @property
+    def label(self) -> str:
+        """Return a short human label, used as the subentry title."""
+        return f"{self.start:%H:%M}-{self.end:%H:%M} ({self.rate:g})"
+
 
 def _parse_time(value: Any) -> time:
-    """Parse a configured time value into a ``datetime.time``."""
+    """Parse a stored time value into a ``datetime.time``."""
     if isinstance(value, time):
         return value
     return time.fromisoformat(str(value))
 
 
+def window_from_dict(raw: Any) -> TariffWindow | None:
+    """Build a window from a stored mapping, or None when unusable."""
+    if not isinstance(raw, Mapping):
+        return None
+    try:
+        start = _parse_time(raw[FIELD_START])
+        end = _parse_time(raw[FIELD_END])
+        rate = float(raw[FIELD_RATE])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if start == end:
+        return None
+    return TariffWindow(start=start, end=end, rate=rate)
+
+
 def parse_windows(raw: Any) -> list[TariffWindow]:
-    """Build windows from a stored window list.
+    """Build windows from a stored list of mappings.
 
     Invalid or unusable entries are skipped with a warning rather than raising,
-    so a bad edit can never take the sensors down. Order is preserved, which is
+    so bad data can never take the sensors down. Order is preserved, which is
     what defines precedence on overlap.
     """
     if not raw:
@@ -77,34 +98,18 @@ def parse_windows(raw: Any) -> list[TariffWindow]:
 
     windows: list[TariffWindow] = []
     for entry in raw:
-        if not isinstance(entry, dict):
-            _LOGGER.warning("Skipping tariff window that is not an object: %r", entry)
+        window = window_from_dict(entry)
+        if window is None:
+            _LOGGER.warning("Skipping unusable tariff window: %r", entry)
             continue
-        try:
-            start = _parse_time(entry[FIELD_START])
-            end = _parse_time(entry[FIELD_END])
-            rate = float(entry[FIELD_RATE])
-        except (KeyError, TypeError, ValueError):
-            _LOGGER.warning("Skipping malformed tariff window: %r", entry)
-            continue
-
-        if start == end:
-            _LOGGER.warning(
-                "Ignoring zero-length tariff window %s-%s: it can never match",
-                start,
-                end,
-            )
-            continue
-
-        windows.append(TariffWindow(start=start, end=end, rate=rate))
-
+        windows.append(window)
     return windows
 
 
 def split_legacy_windows(raw: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Split the pre-split combined format into import and export window lists.
 
-    The old format stored a JSON string of windows each carrying both an
+    The oldest format stored a JSON string of windows each carrying both an
     ``import_rate`` and an ``export_rate``. Returns ``(import_windows,
     export_windows)`` in the current storable format.
     """

@@ -45,13 +45,15 @@ directory and restart Home Assistant.
 
 1. **Settings → Devices & Services → Add Integration → Energy Tariff Helper**.
 2. Give the meter a name (e.g. `Electricity`).
-3. Open the integration's **Options**. You get a menu:
+3. On the integration page you get two sections of windows:
 
-   - **Set the daily supply charge** — a fixed amount billed per day, in `AUD/day`.
-   - **Add / Edit / Remove an import window** — the periods and rates you pay to
-     import.
-   - **Add / Edit / Remove an export window** — the periods and rates you are paid
-     to export.
+   - **Import window** — the periods and rates you pay to import.
+   - **Export window** — the periods and rates you are paid to export.
+
+   Each section has an **Add** button, and every window row has edit and delete
+   buttons. Add as many as you need; changes apply immediately.
+4. **Configure** on the integration page sets the **daily supply charge** — a
+   fixed amount billed per day in `AUD/day`.
 
 Import and export are separate schedules, so you can model a two-tier import
 tariff and a flat feed-in tariff, or any other combination.
@@ -63,8 +65,6 @@ tariff and a flat feed-in tariff, or any other combination.
   so `23:00 → 07:00` covers 11pm through 7am the next morning.
 - When windows overlap, the **earliest-listed** match wins.
 - If no window matches the current time, that direction's rate reads `0.0`.
-
-Changes take effect immediately; no restart needed.
 
 ## Use it in the Energy dashboard
 

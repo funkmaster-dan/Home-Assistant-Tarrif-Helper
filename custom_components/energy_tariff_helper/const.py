@@ -12,11 +12,20 @@ CONF_METER_NAME: Final = "meter_name"
 # Options keys
 CONF_SUPPLY_CHARGE: Final = "supply_charge"  # float, currency/day
 CONF_START_DATE: Final = "start_date"  # ISO "YYYY-MM-DD"; set once, persisted
+
+# Subentry types: one subentry per tariff window, grouped by direction.
+SUBENTRY_TYPE_IMPORT: Final = "import_window"
+SUBENTRY_TYPE_EXPORT: Final = "export_window"
+
+# Window subentry keys
+CONF_START: Final = "start"  # "HH:MM:SS" from TimeSelector
+CONF_END: Final = "end"  # "HH:MM:SS" from TimeSelector
+CONF_RATE: Final = "rate"  # float, currency/kWh
+
+# Pre-subentry storage, migrated on setup.
 CONF_IMPORT_WINDOWS: Final = "import_windows"  # list of {start, end, rate}
 CONF_EXPORT_WINDOWS: Final = "export_windows"  # list of {start, end, rate}
-
-# Pre-split storage format, migrated to the two lists above on setup.
-CONF_LEGACY_WINDOWS: Final = "windows"
+CONF_LEGACY_WINDOWS: Final = "windows"  # JSON string of combined windows
 
 # Entity unique-id suffixes
 KEY_IMPORT_RATE: Final = "import_rate"
@@ -27,6 +36,11 @@ KEY_SUPPLY_CHARGE_TOTAL: Final = "supply_charge_total"
 # Tariff directions
 DIRECTION_IMPORT: Final = "import"
 DIRECTION_EXPORT: Final = "export"
+
+SUBENTRY_TYPE_BY_DIRECTION: Final = {
+    DIRECTION_IMPORT: SUBENTRY_TYPE_IMPORT,
+    DIRECTION_EXPORT: SUBENTRY_TYPE_EXPORT,
+}
 
 # Default (fallback) rate when no window covers the current instant.
 # Deliberately 0.0 for both directions, so an unconfigured or misconfigured
