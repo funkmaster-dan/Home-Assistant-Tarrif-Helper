@@ -165,7 +165,11 @@ class TariffOptionsFlow(OptionsFlow):
     # -- add / edit --------------------------------------------------------
 
     def _window_schema(self, defaults: dict[str, Any] | None = None) -> vol.Schema:
-        """Build the window form, optionally pre-filled."""
+        """Build the window form, optionally pre-filled.
+
+        ``default`` is only attached when a value exists: a ``None`` default on a
+        required time/number selector is rejected by HA's schema serialiser.
+        """
         defaults = defaults or {}
         currency = self.hass.config.currency
         number = selector.NumberSelector(
@@ -177,20 +181,18 @@ class TariffOptionsFlow(OptionsFlow):
                 unit_of_measurement=f"{currency}/kWh",
             )
         )
+
+        def field(name: str) -> Any:
+            if (value := defaults.get(name)) is None:
+                return vol.Required(name)
+            return vol.Required(name, default=value)
+
         return vol.Schema(
             {
-                vol.Required(
-                    FIELD_START, default=defaults.get(FIELD_START)
-                ): selector.TimeSelector(),
-                vol.Required(
-                    FIELD_END, default=defaults.get(FIELD_END)
-                ): selector.TimeSelector(),
-                vol.Required(
-                    FIELD_IMPORT_RATE, default=defaults.get(FIELD_IMPORT_RATE)
-                ): number,
-                vol.Required(
-                    FIELD_EXPORT_RATE, default=defaults.get(FIELD_EXPORT_RATE)
-                ): number,
+                field(FIELD_START): selector.TimeSelector(),
+                field(FIELD_END): selector.TimeSelector(),
+                field(FIELD_IMPORT_RATE): number,
+                field(FIELD_EXPORT_RATE): number,
             }
         )
 
