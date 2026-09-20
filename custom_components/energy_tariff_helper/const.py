@@ -10,8 +10,20 @@ DOMAIN: Final = "energy_tariff_helper"
 CONF_METER_NAME: Final = "meter_name"
 
 # Options keys
-CONF_SUPPLY_CHARGE: Final = "supply_charge"  # float, currency/day
+CONF_SUPPLY_CHARGE: Final = "supply_charge"  # float, currency/day (ex-GST)
 CONF_START_DATE: Final = "start_date"  # ISO "YYYY-MM-DD"; set once, persisted
+
+# GST options: one rate, applied to whichever components are enabled.
+CONF_GST_PERCENT: Final = "gst_percent"  # float, percent
+CONF_GST_IMPORT: Final = "gst_import"  # bool
+CONF_GST_EXPORT: Final = "gst_export"  # bool
+CONF_GST_SUPPLY_CHARGE: Final = "gst_supply_charge"  # bool
+
+# Defaults are opt-in: an upgrade must not silently change reported rates.
+DEFAULT_GST_PERCENT: Final = 10.0
+DEFAULT_GST_IMPORT: Final = False
+DEFAULT_GST_EXPORT: Final = False
+DEFAULT_GST_SUPPLY_CHARGE: Final = False
 
 # Subentry types: one subentry per tariff window, grouped by direction.
 SUBENTRY_TYPE_IMPORT: Final = "import_window"
@@ -49,3 +61,4 @@ DEFAULT_RATE: Final = 0.0
 
 ATTR_ACTIVE_WINDOW: Final = "active_window"  # "HH:MM-HH:MM" or None
 ATTR_WINDOWS: Final = "windows"  # this sensor's own schedule, for templates
+ATTR_GST_MULTIPLIER: Final = "gst_multiplier"  # 1.0 when tax is off

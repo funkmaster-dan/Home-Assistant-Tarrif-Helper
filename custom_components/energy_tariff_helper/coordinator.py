@@ -16,7 +16,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .const import DEFAULT_RATE, DOMAIN
-from .tariff import TariffWindow, active_window
+from .tariff import GstSettings, TariffWindow, active_window
 
 UPDATE_INTERVAL = timedelta(minutes=1)
 
@@ -34,6 +34,7 @@ class TariffCoordinator(DataUpdateCoordinator[None]):
         export_windows: list[TariffWindow],
         supply_charge: float,
         start_date: date,
+        gst: GstSettings | None = None,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -44,8 +45,9 @@ class TariffCoordinator(DataUpdateCoordinator[None]):
         )
         self.import_windows = import_windows
         self.export_windows = export_windows
-        self.supply_charge = supply_charge
+        self.base_supply_charge = supply_charge
         self.start_date = start_date
+        self.gst = gst or GstSettings()
 
     async def _async_update_data(self) -> None:
         """Recompute the active windows.
@@ -66,7 +68,12 @@ class TariffCoordinator(DataUpdateCoordinator[None]):
 
     def async_set_supply_charge(self, supply_charge: float) -> None:
         """Update the daily supply charge and push fresh state."""
-        self.supply_charge = supply_charge
+        self.base_supply_charge = supply_charge
+        self.async_set_updated_data(None)
+
+    def async_set_gst(self, gst: GstSettings) -> None:
+        """Update the tax settings and push fresh state."""
+        self.gst = gst
         self.async_set_updated_data(None)
 
     @property
@@ -81,15 +88,22 @@ class TariffCoordinator(DataUpdateCoordinator[None]):
 
     @property
     def import_rate(self) -> float:
-        """Return the current import rate in currency/kWh."""
+        """Return the current import rate, with tax applied if enabled."""
         window = self.active_import
-        return window.rate if window else DEFAULT_RATE
+        base = window.rate if window else DEFAULT_RATE
+        return base * self.gst.import_multiplier()
 
     @property
     def export_rate(self) -> float:
-        """Return the current export rate in currency/kWh."""
+        """Return the current export rate, with tax applied if enabled."""
         window = self.active_export
-        return window.rate if window else DEFAULT_RATE
+        base = window.rate if window else DEFAULT_RATE
+        return base * self.gst.export_multiplier()
+
+    @property
+    def supply_charge(self) -> float:
+        """Return the daily supply charge, with tax applied if enabled."""
+        return self.base_supply_charge * self.gst.supply_charge_multiplier()
 
     @property
     def days_elapsed(self) -> int:

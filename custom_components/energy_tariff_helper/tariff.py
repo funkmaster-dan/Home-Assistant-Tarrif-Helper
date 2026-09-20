@@ -154,6 +154,38 @@ def split_legacy_windows(raw: Any) -> tuple[list[dict[str, Any]], list[dict[str,
     return import_windows, export_windows
 
 
+@dataclass(frozen=True, slots=True)
+class GstSettings:
+    """How tax is applied to each tariff component.
+
+    One rate, applied independently to import, export and the daily supply
+    charge. Disabled components are left untouched, so a GST-free feed-in tariff
+    sits alongside a taxed import rate.
+    """
+
+    percent: float = 0.0
+    apply_to_import: bool = False
+    apply_to_export: bool = False
+    apply_to_supply_charge: bool = False
+
+    @property
+    def multiplier(self) -> float:
+        """Return the multiplier for the configured rate."""
+        return 1.0 + self.percent / 100.0
+
+    def import_multiplier(self) -> float:
+        """Return the multiplier to apply to import rates."""
+        return self.multiplier if self.apply_to_import else 1.0
+
+    def export_multiplier(self) -> float:
+        """Return the multiplier to apply to export rates."""
+        return self.multiplier if self.apply_to_export else 1.0
+
+    def supply_charge_multiplier(self) -> float:
+        """Return the multiplier to apply to the daily supply charge."""
+        return self.multiplier if self.apply_to_supply_charge else 1.0
+
+
 def window_matches(window: TariffWindow, t: time) -> bool:
     """Return True if ``t`` falls inside ``window``."""
     if window.spans_midnight:

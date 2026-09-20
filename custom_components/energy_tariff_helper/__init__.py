@@ -9,8 +9,10 @@ direction.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from datetime import date
 from types import MappingProxyType
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
@@ -18,22 +20,48 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_EXPORT_WINDOWS,
+    CONF_GST_EXPORT,
+    CONF_GST_IMPORT,
+    CONF_GST_PERCENT,
+    CONF_GST_SUPPLY_CHARGE,
     CONF_IMPORT_WINDOWS,
     CONF_LEGACY_WINDOWS,
     CONF_START_DATE,
     CONF_SUPPLY_CHARGE,
+    DEFAULT_GST_EXPORT,
+    DEFAULT_GST_IMPORT,
+    DEFAULT_GST_PERCENT,
+    DEFAULT_GST_SUPPLY_CHARGE,
     DOMAIN,
     SUBENTRY_TYPE_EXPORT,
     SUBENTRY_TYPE_IMPORT,
 )
 from .coordinator import TariffCoordinator
-from .tariff import TariffWindow, parse_windows, split_legacy_windows, window_from_dict
+from .tariff import (
+    GstSettings,
+    TariffWindow,
+    parse_windows,
+    split_legacy_windows,
+    window_from_dict,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor"]
 
 WINDOW_SUBENTRY_TYPES = (SUBENTRY_TYPE_IMPORT, SUBENTRY_TYPE_EXPORT)
+
+
+def gst_from_options(options: Mapping[str, Any]) -> GstSettings:
+    """Build the tax settings from the config entry options."""
+    return GstSettings(
+        percent=float(options.get(CONF_GST_PERCENT, DEFAULT_GST_PERCENT)),
+        apply_to_import=bool(options.get(CONF_GST_IMPORT, DEFAULT_GST_IMPORT)),
+        apply_to_export=bool(options.get(CONF_GST_EXPORT, DEFAULT_GST_EXPORT)),
+        apply_to_supply_charge=bool(
+            options.get(CONF_GST_SUPPLY_CHARGE, DEFAULT_GST_SUPPLY_CHARGE)
+        ),
+    )
 
 
 def _has_subentries(entry: ConfigEntry, subentry_type: str) -> bool:
@@ -134,6 +162,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         start_date=date.fromisoformat(
             options.get(CONF_START_DATE, dt_util.now().date().isoformat())
         ),
+        gst=gst_from_options(options),
     )
     await coordinator.async_config_entry_first_refresh()
 
@@ -161,3 +190,4 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
         windows_for(entry, SUBENTRY_TYPE_EXPORT),
     )
     coordinator.async_set_supply_charge(entry.options.get(CONF_SUPPLY_CHARGE, 0.0))
+    coordinator.async_set_gst(gst_from_options(entry.options))

@@ -21,6 +21,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     ATTR_ACTIVE_WINDOW,
+    ATTR_GST_MULTIPLIER,
     ATTR_WINDOWS,
     CONF_METER_NAME,
     DIRECTION_EXPORT,
@@ -162,15 +163,32 @@ class TariffSensor(CoordinatorEntity[TariffCoordinator], SensorEntity):
         return self.entity_description.value_fn(self.coordinator)
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Expose this sensor's own active window and full schedule."""
+    def _gst_multiplier(self) -> float:
+        """Return the tax multiplier applied to this sensor's value."""
+        direction = self.entity_description.direction
+        if direction == DIRECTION_IMPORT:
+            return self.coordinator.gst.import_multiplier()
+        if direction == DIRECTION_EXPORT:
+            return self.coordinator.gst.export_multiplier()
+        return self.coordinator.gst.supply_charge_multiplier()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the tax multiplier, plus this sensor's own schedule.
+
+        The schedule lists the rates as configured, so the multiplier is what
+        explains any difference between those and the sensor's value.
+        """
+        attributes: dict[str, Any] = {ATTR_GST_MULTIPLIER: self._gst_multiplier}
+
         if self.entity_description.direction is None:
-            return None
+            return attributes
 
         active = self._own_active
-        return {
-            ATTR_ACTIVE_WINDOW: (
-                f"{active.start:%H:%M}-{active.end:%H:%M}" if active else None
-            ),
-            ATTR_WINDOWS: [window.as_dict() for window in self._own_windows],
-        }
+        attributes[ATTR_ACTIVE_WINDOW] = (
+            f"{active.start:%H:%M}-{active.end:%H:%M}" if active else None
+        )
+        attributes[ATTR_WINDOWS] = [
+            window.as_dict() for window in self._own_windows
+        ]
+        return attributes

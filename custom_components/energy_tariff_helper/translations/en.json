@@ -16,10 +16,20 @@
   "options": {
     "step": {
       "init": {
-        "title": "Daily supply charge",
-        "description": "A fixed amount billed per day, regardless of usage. Tariff windows are managed on the integration page.",
+        "title": "Supply charge and tax",
+        "description": "The daily supply charge is a fixed amount billed per day, regardless of usage. Rates you enter for tariff windows are treated as excluding tax; enable tax per component to add it to the reported values.",
         "data": {
-          "supply_charge": "Daily supply charge"
+          "supply_charge": "Daily supply charge",
+          "gst_percent": "Tax rate",
+          "gst_import": "Add tax to import",
+          "gst_export": "Add tax to export",
+          "gst_supply_charge": "Add tax to supply charge"
+        },
+        "data_description": {
+          "gst_percent": "Applied only to the components enabled below. Australian GST is 10%.",
+          "gst_import": "Rates you enter for import windows are excluding tax.",
+          "gst_export": "Feed-in tariffs are often tax-free, so this is off by default.",
+          "gst_supply_charge": "The daily supply charge is normally taxed."
         }
       }
     }

@@ -52,8 +52,28 @@ directory and restart Home Assistant.
 
    Each section has an **Add** button, and every window row has edit and delete
    buttons. Add as many as you need; changes apply immediately.
-4. **Configure** on the integration page sets the **daily supply charge** — a
-   fixed amount billed per day in `AUD/day`.
+4. **Configure** on the integration page sets:
+
+   - **Daily supply charge** — a fixed amount billed per day in `AUD/day`.
+   - **Tax rate** — the percentage to apply (default 10%, Australian GST).
+   - **Add tax to import / export / supply charge** — three independent toggles.
+
+### Tax (GST)
+
+Enter your tariff rates **excluding tax**, then choose which components get tax
+added. Each is independent:
+
+- **Import** — normally taxed.
+- **Export** — feed-in tariffs are often tax-free, so this is off by default.
+- **Supply charge** — normally taxed.
+
+The rate sensors, the supply charge sensor and the cumulative supply charge total
+all report **tax-inclusive** values once enabled, so the Energy dashboard's cost
+figures include tax. All toggles are **off by default**, so upgrading never
+changes your reported rates.
+
+Every sensor carries a `gst_multiplier` attribute (`1.0` when tax is off for that
+component) explaining any difference from the rates you entered.
 
 Import and export are separate schedules, so you can model a two-tier import
 tariff and a flat feed-in tariff, or any other combination.
@@ -96,7 +116,7 @@ from the day the integration was set up and never decreases, so restarts are saf
 
 ## Notes
 
-- Rates are stored exactly as you enter them, inclusive of any tax. There is no tax
-  logic.
+- Rates are stored as you enter them, **excluding tax**. Tax is applied only to
+  the components you enable, as described above.
 - The active window is re-evaluated once a minute, so a rate change at a window
   boundary appears within about a minute.

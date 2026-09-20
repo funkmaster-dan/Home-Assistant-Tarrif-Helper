@@ -31,10 +31,18 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_END,
+    CONF_GST_EXPORT,
+    CONF_GST_IMPORT,
+    CONF_GST_PERCENT,
+    CONF_GST_SUPPLY_CHARGE,
     CONF_METER_NAME,
     CONF_RATE,
     CONF_START,
     CONF_SUPPLY_CHARGE,
+    DEFAULT_GST_EXPORT,
+    DEFAULT_GST_IMPORT,
+    DEFAULT_GST_PERCENT,
+    DEFAULT_GST_SUPPLY_CHARGE,
     DOMAIN,
     SUBENTRY_TYPE_EXPORT,
     SUBENTRY_TYPE_IMPORT,
@@ -128,23 +136,24 @@ class ConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class TariffOptionsFlow(OptionsFlow):
-    """Manage the daily supply charge."""
+    """Manage the daily supply charge and tax settings."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Ask for the daily supply charge."""
+        """Ask for the supply charge and tax settings."""
         if user_input is not None:
             options = dict(self.config_entry.options)
-            options[CONF_SUPPLY_CHARGE] = user_input[CONF_SUPPLY_CHARGE]
+            options.update(user_input)
             return self.async_create_entry(data=options)
 
+        options = self.config_entry.options
         currency = self.hass.config.currency
         schema = vol.Schema(
             {
                 vol.Required(
                     CONF_SUPPLY_CHARGE,
-                    default=self.config_entry.options.get(CONF_SUPPLY_CHARGE, 0.0),
+                    default=options.get(CONF_SUPPLY_CHARGE, 0.0),
                 ): selector.NumberSelector(
                     selector.NumberSelectorConfig(
                         min=0,
@@ -153,7 +162,33 @@ class TariffOptionsFlow(OptionsFlow):
                         mode=selector.NumberSelectorMode.BOX,
                         unit_of_measurement=f"{currency}/day",
                     )
-                )
+                ),
+                vol.Required(
+                    CONF_GST_PERCENT,
+                    default=options.get(CONF_GST_PERCENT, DEFAULT_GST_PERCENT),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0,
+                        max=100,
+                        step=0.1,
+                        mode=selector.NumberSelectorMode.BOX,
+                        unit_of_measurement="%",
+                    )
+                ),
+                vol.Required(
+                    CONF_GST_IMPORT,
+                    default=options.get(CONF_GST_IMPORT, DEFAULT_GST_IMPORT),
+                ): selector.BooleanSelector(),
+                vol.Required(
+                    CONF_GST_EXPORT,
+                    default=options.get(CONF_GST_EXPORT, DEFAULT_GST_EXPORT),
+                ): selector.BooleanSelector(),
+                vol.Required(
+                    CONF_GST_SUPPLY_CHARGE,
+                    default=options.get(
+                        CONF_GST_SUPPLY_CHARGE, DEFAULT_GST_SUPPLY_CHARGE
+                    ),
+                ): selector.BooleanSelector(),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)
