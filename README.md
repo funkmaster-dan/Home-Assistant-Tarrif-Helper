@@ -101,18 +101,30 @@ The Energy dashboard can compute costs directly from the rate sensors:
 ### Adding the fixed daily supply charge
 
 Home Assistant's Energy dashboard has no built-in field for a fixed daily charge —
-its cost engine only ever multiplies energy by price. The supported workaround is to
-hand the dashboard a cumulative monetary total:
+its cost engine only ever multiplies energy by price. The supported workaround is a
+dedicated grid source that carries the charge as a cumulative cost:
 
-1. **Settings → Dashboards → Energy → Grid**.
-2. Add a grid source using a placeholder energy entity pinned to `0` kWh
-   (`device_class: energy`, `state_class: total_increasing`, unit `kWh`). A utility
-   meter with a non-empty tariff also works.
-3. Set that source's **"entity tracking the total costs"** to
-   `sensor.<meter>_supply_charge_total`.
+1. Create a placeholder energy entity, pinned to `0` kWh. **Settings → Devices &
+   Services → Helpers → Create helper → Template → Sensor**:
 
-The dashboard then folds your daily charge into its cost figures. The total counts
+   | Field | Value |
+   | --- | --- |
+   | Name | `Daily supply charge` |
+   | State template | `{{ 0 }}` |
+   | Unit of measurement | `kWh` |
+   | Device class | `energy` |
+   | State class | `total_increasing` |
+
+2. **Settings → Dashboards → Energy → Grid → Add grid source**, and set:
+   - **Grid consumption** → the placeholder entity (`sensor.daily_supply_charge`)
+   - **"entity tracking the total costs"** → `sensor.<meter>_supply_charge_total`
+
+Because the placeholder always reads `0` kWh, it adds nothing to your energy
+totals, while its cost is added to the dashboard's cost figures. The total counts
 from the day the integration was set up and never decreases, so restarts are safe.
+
+Note that the cost field only exists on **grid** sources — individual devices
+cannot carry a cost entity.
 
 ## Notes
 
