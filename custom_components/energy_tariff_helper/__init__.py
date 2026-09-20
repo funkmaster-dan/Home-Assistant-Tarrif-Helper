@@ -27,7 +27,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Energy Tariff Helper from a config entry."""
     if CONF_START_DATE not in entry.options:
         # Persist the setup date so the cumulative supply charge total never
-        # resets across restarts (a TOTAL_INCREASING statistic requirement).
+        # resets across restarts (required by the TOTAL statistic).
         hass.config_entries.async_update_entry(
             entry,
             options={

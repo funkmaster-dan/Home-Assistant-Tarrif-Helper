@@ -92,6 +92,6 @@ class TariffCoordinator(DataUpdateCoordinator[None]):
         """Return the cumulative supply charge since setup.
 
         Monotonically non-decreasing for a fixed charge, which is what a
-        TOTAL_INCREASING statistic requires.
+        cumulative (TOTAL) statistic requires.
         """
         return self.days_elapsed * self.supply_charge

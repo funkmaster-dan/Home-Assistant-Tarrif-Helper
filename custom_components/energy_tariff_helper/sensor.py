@@ -74,7 +74,11 @@ SUPPLY_SENSORS: tuple[TariffSensorEntityDescription, ...] = (
     TariffSensorEntityDescription(
         key=KEY_SUPPLY_CHARGE_TOTAL,
         translation_key=KEY_SUPPLY_CHARGE_TOTAL,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        # MONETARY permits only TOTAL (see DEVICE_CLASS_STATE_CLASSES in
+        # homeassistant/components/sensor/const.py). TOTAL_INCREASING is
+        # rejected with a warning, so the cumulative supply charge must be
+        # declared TOTAL. The Energy dashboard accepts both.
+        state_class=SensorStateClass.TOTAL,
         device_class=SensorDeviceClass.MONETARY,
         suggested_display_precision=2,
         value_fn=lambda coordinator: coordinator.supply_charge_total,
