@@ -42,7 +42,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry,
         windows=parse_windows(entry.options.get(CONF_WINDOWS_JSON)),
         supply_charge=entry.options.get(CONF_SUPPLY_CHARGE, 0.0),
-        start_date=date.fromisoformat(entry.options[CONF_START_DATE]),
+        start_date=date.fromisoformat(
+            entry.options.get(CONF_START_DATE, dt_util.now().date().isoformat())
+        ),
     )
     await coordinator.async_config_entry_first_refresh()
 

@@ -33,6 +33,7 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_METER_NAME,
+    CONF_START_DATE,
     CONF_SUPPLY_CHARGE,
     CONF_WINDOWS_JSON,
     DOMAIN,
@@ -131,7 +132,12 @@ class TariffOptionsFlow(OptionsFlow):
             except vol.Invalid as err:
                 errors["base"] = str(err)
             else:
-                return self.async_create_entry(data=user_input)
+                # Preserve start_date: it anchors the cumulative supply charge
+                # total and is set once at first setup, not by this form.
+                data = dict(user_input)
+                if (start_date := self.config_entry.options.get(CONF_START_DATE)):
+                    data[CONF_START_DATE] = start_date
+                return self.async_create_entry(data=data)
 
         options = self.config_entry.options
         currency = self.hass.config.currency
