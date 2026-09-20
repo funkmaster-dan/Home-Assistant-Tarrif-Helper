@@ -1,0 +1,77 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Energy Tariff Helper",
+        "description": "Name this meter. Each meter gets its own set of tariff windows.",
+        "data": {
+          "meter_name": "Meter name"
+        }
+      }
+    },
+    "error": {
+      "zero_length_window": "The start and end times must be different.",
+      "duplicate_window": "A window with the same start and end times already exists."
+    },
+    "abort": {
+      "already_configured": "This meter is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Tariff options",
+        "description": "The daily supply charge is a fixed amount billed per day, regardless of usage.",
+        "data": {
+          "supply_charge": "Daily supply charge"
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "window": {
+      "title": "Tariff window",
+      "initiate_flow": {
+        "user": "Add tariff window"
+      },
+      "step": {
+        "user": {
+          "title": "Add tariff window",
+          "description": "A recurring daily period. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
+          "data": {
+            "start": "Start time",
+            "end": "End time",
+            "import_rate": "Import rate",
+            "export_rate": "Export rate"
+          }
+        },
+        "reconfigure": {
+          "title": "Edit tariff window",
+          "description": "A recurring daily period. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
+          "data": {
+            "start": "Start time",
+            "end": "End time",
+            "import_rate": "Import rate",
+            "export_rate": "Export rate"
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "import_rate": {
+        "name": "Import rate"
+      },
+      "export_rate": {
+        "name": "Export rate"
+      },
+      "supply_charge": {
+        "name": "Supply charge"
+      },
+      "supply_charge_total": {
+        "name": "Supply charge total"
+      }
+    }
+  }
+}
