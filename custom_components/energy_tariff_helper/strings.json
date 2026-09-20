@@ -16,28 +16,61 @@
   "options": {
     "step": {
       "init": {
-        "title": "Tariff options",
-        "description": "The daily supply charge is billed per day regardless of usage. Windows are recurring daily periods; a window whose end is earlier than its start spans midnight. On overlap, the earliest-listed window wins.",
+        "title": "Energy Tariff Helper",
+        "menu_options": {
+          "supply_charge": "Set the daily supply charge",
+          "add_window": "Add a tariff window",
+          "edit_window": "Edit a tariff window",
+          "remove_window": "Remove a tariff window"
+        }
+      },
+      "supply_charge": {
+        "title": "Daily supply charge",
+        "description": "A fixed amount billed per day, regardless of usage.",
         "data": {
-          "supply_charge": "Daily supply charge",
-          "windows": "Tariff windows (JSON)"
-        },
-        "data_description": {
-          "windows": "A JSON list, e.g. [{\"start\": \"07:00\", \"end\": \"23:00\", \"import_rate\": 0.35, \"export_rate\": 0.05}]. Times are 24-hour; rates are per kWh."
+          "supply_charge": "Daily supply charge"
+        }
+      },
+      "add_window": {
+        "title": "Add a tariff window",
+        "description": "A recurring daily period. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
+        "data": {
+          "start": "Start time",
+          "end": "End time",
+          "import_rate": "Import rate",
+          "export_rate": "Export rate"
+        }
+      },
+      "edit_window": {
+        "title": "Edit a tariff window",
+        "description": "Pick the window to change.",
+        "data": {
+          "window": "Window"
+        }
+      },
+      "edit_window_details": {
+        "title": "Edit tariff window",
+        "description": "A recurring daily period. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
+        "data": {
+          "start": "Start time",
+          "end": "End time",
+          "import_rate": "Import rate",
+          "export_rate": "Export rate"
+        }
+      },
+      "remove_window": {
+        "title": "Remove a tariff window",
+        "description": "Pick the window to remove.",
+        "data": {
+          "window": "Window"
         }
       }
     },
     "error": {
-      "invalid_json": "That is not valid JSON.",
-      "windows_not_a_list": "The windows must be a JSON list.",
-      "window_not_an_object": "Each window must be a JSON object.",
-      "window_missing_field": "Each window needs start, end, import_rate and export_rate.",
-      "window_time_not_string": "Start and end times must be strings like \"07:00\".",
-      "window_time_malformed": "Times must look like \"07:00\" or \"07:00:00\".",
-      "window_time_out_of_range": "Times must be a valid 24-hour clock time.",
-      "zero_length_window": "A window's start and end times must differ.",
-      "window_rate_not_number": "Import and export rates must be numbers.",
-      "window_rate_negative": "Import and export rates cannot be negative."
+      "zero_length_window": "The start and end times must be different."
+    },
+    "abort": {
+      "no_windows": "There are no tariff windows configured."
     }
   },
   "entity": {

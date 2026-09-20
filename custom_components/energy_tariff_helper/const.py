@@ -12,13 +12,7 @@ CONF_METER_NAME: Final = "meter_name"
 # Options keys
 CONF_SUPPLY_CHARGE: Final = "supply_charge"  # float, AUD/day
 CONF_START_DATE: Final = "start_date"  # ISO "YYYY-MM-DD"; set once, persisted
-CONF_WINDOWS_JSON: Final = "windows"  # JSON list of window objects
-
-# Seeded into the options form so the expected shape is discoverable.
-DEFAULT_WINDOWS_JSON: Final = """[
-  {"start": "07:00", "end": "23:00", "import_rate": 0.35, "export_rate": 0.05},
-  {"start": "23:00", "end": "07:00", "import_rate": 0.18, "export_rate": 0.05}
-]"""
+CONF_WINDOWS_JSON: Final = "windows"  # JSON list of window objects (internal)
 
 # Entity unique-id suffixes
 KEY_IMPORT_RATE: Final = "import_rate"

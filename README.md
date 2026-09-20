@@ -41,30 +41,23 @@ directory and restart Home Assistant.
 
 1. **Settings → Devices & Services → Add Integration → Energy Tariff Helper**.
 2. Give the meter a name (e.g. `Electricity`).
-3. Open the integration's **Options**. There you set:
-   - **Daily supply charge** in `AUD/day`, and
-   - **Tariff windows** as a JSON list.
+3. Open the integration's **Options**. You get a menu:
 
-### Tariff windows
+   - **Set the daily supply charge** — a fixed amount billed per day, in `AUD/day`.
+   - **Add a tariff window** — pick a start time, an end time, and the import and
+     export rates.
+   - **Edit a tariff window** — choose one from the list and change it.
+   - **Remove a tariff window** — choose one from the list and delete it.
 
-Each window is a recurring daily period with an import and export rate in
-`AUD/kWh`:
-
-```json
-[
-  {"start": "07:00", "end": "23:00", "import_rate": 0.35, "export_rate": 0.05},
-  {"start": "23:00", "end": "07:00", "import_rate": 0.18, "export_rate": 0.05}
-]
-```
+### How windows behave
 
 - `start` is inclusive, `end` is exclusive.
-- If `end` is earlier than `start`, the window spans midnight (the second
-  window above covers 23:00 → 07:00 the next morning).
+- If the end time is earlier than the start time, the window spans midnight —
+  so `23:00 → 07:00` covers 11pm through 7am the next morning.
 - When windows overlap, the **earliest-listed** match wins.
 - If no window matches the current time, both rates read `0.0`.
 
-The form rejects malformed JSON, missing fields, bad times, zero-length
-windows and negative rates, with a message naming the problem.
+Changes take effect immediately; no restart needed.
 
 ## Use it in the Energy dashboard
 

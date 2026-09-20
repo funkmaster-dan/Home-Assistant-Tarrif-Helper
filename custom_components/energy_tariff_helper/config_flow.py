@@ -1,23 +1,17 @@
 """Config and options flows for the Energy Tariff Helper integration.
 
-The initial config flow names the meter. Everything else — the daily supply
-charge and the tariff windows — is managed by the options flow, so all
-configuration lives in one place and one proven code path.
+The initial config flow names the meter. The options flow is a menu that
+manages the daily supply charge and the tariff windows using real time and
+number pickers — windows are never edited as raw JSON.
 
-Windows are edited as a JSON list in the options dialog, e.g.::
-
-    [
-      {"start": "07:00", "end": "23:00", "import_rate": 0.35, "export_rate": 0.05},
-      {"start": "23:00", "end": "07:00", "import_rate": 0.18, "export_rate": 0.05}
-    ]
-
-A window whose end is earlier than its start spans midnight. When windows
-overlap, the earliest-listed match wins.
+Windows are persisted in ``entry.options`` as a JSON string, but that is an
+internal detail: the UI exposes one window at a time.
 """
 
 from __future__ import annotations
 
 import json
+from datetime import time
 from typing import Any
 
 import voluptuous as vol
@@ -37,51 +31,48 @@ from .const import (
     CONF_SUPPLY_CHARGE,
     CONF_WINDOWS_JSON,
     DOMAIN,
-    DEFAULT_WINDOWS_JSON,
+)
+from .tariff import (
+    FIELD_END,
+    FIELD_EXPORT_RATE,
+    FIELD_IMPORT_RATE,
+    FIELD_START,
+    TariffWindow,
+    parse_windows,
 )
 
+MENU_ADD = "add_window"
+MENU_EDIT = "edit_window"
+MENU_REMOVE = "remove_window"
+MENU_SUPPLY = "supply_charge"
 
-def _validate_windows(raw: str) -> str:
-    """Validate the windows JSON.
 
-    Raises ``vol.Invalid`` with a translated error key when the payload is not
-    usable, so the options form can show a precise message.
-    """
-    try:
-        parsed = json.loads(raw)
-    except ValueError as err:
-        raise vol.Invalid("invalid_json") from err
+def _to_time(value: str) -> time:
+    """Convert a TimeSelector value into a ``datetime.time``."""
+    return time.fromisoformat(value)
 
-    if not isinstance(parsed, list):
-        raise vol.Invalid("windows_not_a_list")
 
-    for index, window in enumerate(parsed):
-        if not isinstance(window, dict):
-            raise vol.Invalid("window_not_an_object")
-        for field in ("start", "end", "import_rate", "export_rate"):
-            if field not in window:
-                raise vol.Invalid("window_missing_field")
-        # "HH:MM" or "HH:MM:SS", 24-hour.
-        for field in ("start", "end"):
-            value = window[field]
-            if not isinstance(value, str):
-                raise vol.Invalid("window_time_not_string")
-            parts = value.split(":")
-            if len(parts) not in (2, 3) or not all(p.isdigit() for p in parts):
-                raise vol.Invalid("window_time_malformed")
-            numbers = [int(p) for p in parts]
-            if not (0 <= numbers[0] <= 23 and all(0 <= p <= 59 for p in numbers[1:])):
-                raise vol.Invalid("window_time_out_of_range")
-        if window["start"] == window["end"]:
-            raise vol.Invalid("zero_length_window")
-        for field in ("import_rate", "export_rate"):
-            value = window[field]
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
-                raise vol.Invalid("window_rate_not_number")
-            if value < 0:
-                raise vol.Invalid("window_rate_negative")
+def _window_label(window: TariffWindow) -> str:
+    """Return a human label for a window, used as the select option."""
+    return (
+        f"{window.start:%H:%M}-{window.end:%H:%M} "
+        f"(import {window.import_rate:g}, export {window.export_rate:g})"
+    )
 
-    return raw
+
+def _serialise(windows: list[TariffWindow]) -> str:
+    """Serialise windows back to the stored JSON form."""
+    return json.dumps(
+        [
+            {
+                FIELD_START: window.start.strftime("%H:%M"),
+                FIELD_END: window.end.strftime("%H:%M"),
+                FIELD_IMPORT_RATE: window.import_rate,
+                FIELD_EXPORT_RATE: window.export_rate,
+            }
+            for window in windows
+        ]
+    )
 
 
 class ConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -118,34 +109,46 @@ class ConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class TariffOptionsFlow(OptionsFlow):
-    """Manage the daily supply charge and the tariff windows."""
+    """Menu-driven management of the supply charge and tariff windows."""
+
+    def _windows(self) -> list[TariffWindow]:
+        """Return the currently configured windows."""
+        return parse_windows(self.config_entry.options.get(CONF_WINDOWS_JSON))
+
+    def _save(self, windows: list[TariffWindow]) -> ConfigFlowResult:
+        """Persist the window list, preserving the other options."""
+        options = dict(self.config_entry.options)
+        options[CONF_WINDOWS_JSON] = _serialise(windows)
+        return self.async_create_entry(data=options)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Show the options form."""
-        errors: dict[str, str] = {}
+        """Show the options menu."""
+        windows = self._windows()
+        menu = [MENU_SUPPLY, MENU_ADD]
+        if windows:
+            menu += [MENU_EDIT, MENU_REMOVE]
 
+        return self.async_show_menu(step_id="init", menu_options=menu)
+
+    # -- supply charge -----------------------------------------------------
+
+    async def async_step_supply_charge(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Set the daily supply charge."""
         if user_input is not None:
-            try:
-                _validate_windows(user_input[CONF_WINDOWS_JSON])
-            except vol.Invalid as err:
-                errors["base"] = str(err)
-            else:
-                # Preserve start_date: it anchors the cumulative supply charge
-                # total and is set once at first setup, not by this form.
-                data = dict(user_input)
-                if (start_date := self.config_entry.options.get(CONF_START_DATE)):
-                    data[CONF_START_DATE] = start_date
-                return self.async_create_entry(data=data)
+            options = dict(self.config_entry.options)
+            options[CONF_SUPPLY_CHARGE] = user_input[CONF_SUPPLY_CHARGE]
+            return self.async_create_entry(data=options)
 
-        options = self.config_entry.options
         currency = self.hass.config.currency
         schema = vol.Schema(
             {
                 vol.Required(
                     CONF_SUPPLY_CHARGE,
-                    default=options.get(CONF_SUPPLY_CHARGE, 0.0),
+                    default=self.config_entry.options.get(CONF_SUPPLY_CHARGE, 0.0),
                 ): selector.NumberSelector(
                     selector.NumberSelectorConfig(
                         min=0,
@@ -154,13 +157,152 @@ class TariffOptionsFlow(OptionsFlow):
                         mode=selector.NumberSelectorMode.BOX,
                         unit_of_measurement=f"{currency}/day",
                     )
-                ),
-                vol.Required(
-                    CONF_WINDOWS_JSON,
-                    default=options.get(CONF_WINDOWS_JSON, DEFAULT_WINDOWS_JSON),
-                ): selector.TextSelector(
-                    selector.TextSelectorConfig(multiline=True)
-                ),
+                )
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+        return self.async_show_form(step_id=MENU_SUPPLY, data_schema=schema)
+
+    # -- add / edit --------------------------------------------------------
+
+    def _window_schema(self, defaults: dict[str, Any] | None = None) -> vol.Schema:
+        """Build the window form, optionally pre-filled."""
+        defaults = defaults or {}
+        currency = self.hass.config.currency
+        number = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                max=100,
+                step=0.0001,
+                mode=selector.NumberSelectorMode.BOX,
+                unit_of_measurement=f"{currency}/kWh",
+            )
+        )
+        return vol.Schema(
+            {
+                vol.Required(
+                    FIELD_START, default=defaults.get(FIELD_START)
+                ): selector.TimeSelector(),
+                vol.Required(
+                    FIELD_END, default=defaults.get(FIELD_END)
+                ): selector.TimeSelector(),
+                vol.Required(
+                    FIELD_IMPORT_RATE, default=defaults.get(FIELD_IMPORT_RATE)
+                ): number,
+                vol.Required(
+                    FIELD_EXPORT_RATE, default=defaults.get(FIELD_EXPORT_RATE)
+                ): number,
+            }
+        )
+
+    async def _async_save_window(
+        self,
+        user_input: dict[str, Any],
+        windows: list[TariffWindow],
+        replace_index: int | None = None,
+    ) -> ConfigFlowResult:
+        """Validate and store a window, then finish."""
+        start, end = user_input[FIELD_START], user_input[FIELD_END]
+        if start == end:
+            return self.async_show_form(
+                step_id=MENU_ADD if replace_index is None else MENU_EDIT,
+                data_schema=self._window_schema(user_input),
+                errors={"base": "zero_length_window"},
+            )
+
+        candidate = TariffWindow(
+            start=_to_time(start),
+            end=_to_time(end),
+            import_rate=float(user_input[FIELD_IMPORT_RATE]),
+            export_rate=float(user_input[FIELD_EXPORT_RATE]),
+        )
+
+        if replace_index is None:
+            updated = [*windows, candidate]
+        else:
+            updated = list(windows)
+            updated[replace_index] = candidate
+
+        return self._save(updated)
+
+    async def async_step_add_window(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Add a window."""
+        if user_input is not None:
+            return await self._async_save_window(user_input, self._windows())
+        return self.async_show_form(step_id=MENU_ADD, data_schema=self._window_schema())
+
+    async def async_step_edit_window(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Pick a window, then edit it."""
+        windows = self._windows()
+        if not windows:
+            return self.async_abort(reason="no_windows")
+
+        labels = [_window_label(window) for window in windows]
+        if user_input is not None:
+            self._edit_index = labels.index(user_input["window"])
+            return await self.async_step_edit_window_details()
+
+        return self.async_show_form(
+            step_id=MENU_EDIT,
+            data_schema=vol.Schema(
+                {
+                    vol.Required("window"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=labels,
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_edit_window_details(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit the selected window."""
+        windows = self._windows()
+        index = self._edit_index
+        window = windows[index]
+        if user_input is not None:
+            return await self._async_save_window(user_input, windows, replace_index=index)
+
+        defaults = {
+            FIELD_START: window.start.strftime("%H:%M:%S"),
+            FIELD_END: window.end.strftime("%H:%M:%S"),
+            FIELD_IMPORT_RATE: window.import_rate,
+            FIELD_EXPORT_RATE: window.export_rate,
+        }
+        return self.async_show_form(
+            step_id="edit_window_details", data_schema=self._window_schema(defaults)
+        )
+
+    async def async_step_remove_window(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Pick a window and remove it."""
+        windows = self._windows()
+        if not windows:
+            return self.async_abort(reason="no_windows")
+
+        labels = [_window_label(window) for window in windows]
+        if user_input is not None:
+            index = labels.index(user_input["window"])
+            remaining = [w for i, w in enumerate(windows) if i != index]
+            return self._save(remaining)
+
+        return self.async_show_form(
+            step_id=MENU_REMOVE,
+            data_schema=vol.Schema(
+                {
+                    vol.Required("window"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=labels,
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    )
+                }
+            ),
+        )
