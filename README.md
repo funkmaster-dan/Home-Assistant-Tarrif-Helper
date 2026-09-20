@@ -120,8 +120,12 @@ dedicated grid source that carries the charge as a cumulative cost:
    - **"entity tracking the total costs"** → `sensor.<meter>_supply_charge_total`
 
 Because the placeholder always reads `0` kWh, it adds nothing to your energy
-totals, while its cost is added to the dashboard's cost figures. The total counts
-from the day the integration was set up and never decreases, so restarts are safe.
+totals, while its cost is added to the dashboard's cost figures.
+
+The total applies the charge **from the start of each day**, so the current day is
+included as soon as it begins and the charge for a given day is recorded on that
+day. The setup day counts as day one. The value only ever increases, so restarts
+are safe.
 
 Note that the cost field only exists on **grid** sources — individual devices
 cannot carry a cost entity.

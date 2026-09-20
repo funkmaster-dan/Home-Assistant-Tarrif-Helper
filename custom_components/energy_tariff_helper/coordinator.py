@@ -106,15 +106,20 @@ class TariffCoordinator(DataUpdateCoordinator[None]):
         return self.base_supply_charge * self.gst.supply_charge_multiplier()
 
     @property
-    def days_elapsed(self) -> int:
-        """Return whole days since setup, clamped to never go negative."""
-        return max(0, (dt_util.now().date() - self.start_date).days)
+    def days_billed(self) -> int:
+        """Return the number of days billed, counting the current day.
+
+        The supply charge applies from the start of each day, so the current day
+        is included as soon as it begins and the setup day counts as day one
+        even though the integration may have been added partway through it.
+        """
+        return max(1, (dt_util.now().date() - self.start_date).days + 1)
 
     @property
     def supply_charge_total(self) -> float:
         """Return the cumulative supply charge since setup.
 
-        Monotonically non-decreasing for a fixed charge, which is what a
-        cumulative (TOTAL) statistic requires.
+        Monotonically non-decreasing, which is what a cumulative (TOTAL)
+        statistic requires.
         """
-        return self.days_elapsed * self.supply_charge
+        return self.days_billed * self.supply_charge
