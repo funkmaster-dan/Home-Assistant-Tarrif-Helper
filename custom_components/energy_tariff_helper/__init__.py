@@ -15,6 +15,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_START_DATE,
     CONF_SUPPLY_CHARGE,
+    CONF_WINDOWS_JSON,
     DOMAIN,
 )
 from .coordinator import TariffCoordinator
@@ -39,7 +40,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = TariffCoordinator(
         hass,
         entry,
-        windows=parse_windows(entry.subentries.values()),
+        windows=parse_windows(entry.options.get(CONF_WINDOWS_JSON)),
         supply_charge=entry.options.get(CONF_SUPPLY_CHARGE, 0.0),
         start_date=date.fromisoformat(entry.options[CONF_START_DATE]),
     )
@@ -62,7 +63,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Rebuild the schedule when subentries or options change."""
+    """Rebuild the schedule when options change."""
     coordinator: TariffCoordinator = hass.data[DOMAIN][entry.entry_id]
-    coordinator.async_set_windows(parse_windows(entry.subentries.values()))
+    coordinator.async_set_windows(parse_windows(entry.options.get(CONF_WINDOWS_JSON)))
     coordinator.async_set_supply_charge(entry.options.get(CONF_SUPPLY_CHARGE, 0.0))

@@ -3,15 +3,11 @@
     "step": {
       "user": {
         "title": "Energy Tariff Helper",
-        "description": "Name this meter. Each meter gets its own set of tariff windows.",
+        "description": "Name this meter. You'll set its tariff windows next.",
         "data": {
           "meter_name": "Meter name"
         }
       }
-    },
-    "error": {
-      "zero_length_window": "The start and end times must be different.",
-      "duplicate_window": "A window with the same start and end times already exists."
     },
     "abort": {
       "already_configured": "This meter is already configured."
@@ -21,41 +17,27 @@
     "step": {
       "init": {
         "title": "Tariff options",
-        "description": "The daily supply charge is a fixed amount billed per day, regardless of usage.",
+        "description": "The daily supply charge is billed per day regardless of usage. Windows are recurring daily periods; a window whose end is earlier than its start spans midnight. On overlap, the earliest-listed window wins.",
         "data": {
-          "supply_charge": "Daily supply charge"
-        }
-      }
-    }
-  },
-  "config_subentries": {
-    "window": {
-      "title": "Tariff window",
-      "initiate_flow": {
-        "user": "Add tariff window"
-      },
-      "step": {
-        "user": {
-          "title": "Add tariff window",
-          "description": "A recurring daily period. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
-          "data": {
-            "start": "Start time",
-            "end": "End time",
-            "import_rate": "Import rate",
-            "export_rate": "Export rate"
-          }
+          "supply_charge": "Daily supply charge",
+          "windows": "Tariff windows (JSON)"
         },
-        "reconfigure": {
-          "title": "Edit tariff window",
-          "description": "A recurring daily period. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
-          "data": {
-            "start": "Start time",
-            "end": "End time",
-            "import_rate": "Import rate",
-            "export_rate": "Export rate"
-          }
+        "data_description": {
+          "windows": "A JSON list, e.g. [{\"start\": \"07:00\", \"end\": \"23:00\", \"import_rate\": 0.35, \"export_rate\": 0.05}]. Times are 24-hour; rates are per kWh."
         }
       }
+    },
+    "error": {
+      "invalid_json": "That is not valid JSON.",
+      "windows_not_a_list": "The windows must be a JSON list.",
+      "window_not_an_object": "Each window must be a JSON object.",
+      "window_missing_field": "Each window needs start, end, import_rate and export_rate.",
+      "window_time_not_string": "Start and end times must be strings like \"07:00\".",
+      "window_time_malformed": "Times must look like \"07:00\" or \"07:00:00\".",
+      "window_time_out_of_range": "Times must be a valid 24-hour clock time.",
+      "zero_length_window": "A window's start and end times must differ.",
+      "window_rate_not_number": "Import and export rates must be numbers.",
+      "window_rate_negative": "Import and export rates cannot be negative."
     }
   },
   "entity": {
