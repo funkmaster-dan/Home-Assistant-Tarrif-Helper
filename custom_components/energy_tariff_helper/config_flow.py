@@ -2,15 +2,14 @@
 
 The initial config flow names the meter. The options flow is a menu that
 manages the daily supply charge and the tariff windows using real time and
-number pickers — windows are never edited as raw JSON.
+number pickers.
 
-Windows are persisted in ``entry.options`` as a JSON string, but that is an
-internal detail: the UI exposes one window at a time.
+Import and export tariffs are separate schedules, so each direction has its own
+list of windows and its own add/edit/remove actions.
 """
 
 from __future__ import annotations
 
-import json
 from datetime import time
 from typing import Any
 
@@ -26,25 +25,34 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_EXPORT_WINDOWS,
+    CONF_IMPORT_WINDOWS,
     CONF_METER_NAME,
-    CONF_START_DATE,
     CONF_SUPPLY_CHARGE,
-    CONF_WINDOWS_JSON,
+    DIRECTION_EXPORT,
+    DIRECTION_IMPORT,
     DOMAIN,
 )
 from .tariff import (
     FIELD_END,
-    FIELD_EXPORT_RATE,
-    FIELD_IMPORT_RATE,
+    FIELD_RATE,
     FIELD_START,
     TariffWindow,
     parse_windows,
 )
 
-MENU_ADD = "add_window"
-MENU_EDIT = "edit_window"
-MENU_REMOVE = "remove_window"
 MENU_SUPPLY = "supply_charge"
+MENU_ADD_IMPORT = "add_import_window"
+MENU_EDIT_IMPORT = "edit_import_window"
+MENU_REMOVE_IMPORT = "remove_import_window"
+MENU_ADD_EXPORT = "add_export_window"
+MENU_EDIT_EXPORT = "edit_export_window"
+MENU_REMOVE_EXPORT = "remove_export_window"
+
+_OPTION_KEY = {
+    DIRECTION_IMPORT: CONF_IMPORT_WINDOWS,
+    DIRECTION_EXPORT: CONF_EXPORT_WINDOWS,
+}
 
 
 def _to_time(value: str) -> time:
@@ -54,25 +62,7 @@ def _to_time(value: str) -> time:
 
 def _window_label(window: TariffWindow) -> str:
     """Return a human label for a window, used as the select option."""
-    return (
-        f"{window.start:%H:%M}-{window.end:%H:%M} "
-        f"(import {window.import_rate:g}, export {window.export_rate:g})"
-    )
-
-
-def _serialise(windows: list[TariffWindow]) -> str:
-    """Serialise windows back to the stored JSON form."""
-    return json.dumps(
-        [
-            {
-                FIELD_START: window.start.strftime("%H:%M"),
-                FIELD_END: window.end.strftime("%H:%M"),
-                FIELD_IMPORT_RATE: window.import_rate,
-                FIELD_EXPORT_RATE: window.export_rate,
-            }
-            for window in windows
-        ]
-    )
+    return f"{window.start:%H:%M}-{window.end:%H:%M} (rate {window.rate:g})"
 
 
 class ConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -111,24 +101,25 @@ class ConfigFlow(ConfigFlow, domain=DOMAIN):
 class TariffOptionsFlow(OptionsFlow):
     """Menu-driven management of the supply charge and tariff windows."""
 
-    def _windows(self) -> list[TariffWindow]:
-        """Return the currently configured windows."""
-        return parse_windows(self.config_entry.options.get(CONF_WINDOWS_JSON))
+    def _windows(self, direction: str) -> list[TariffWindow]:
+        """Return the configured windows for one direction."""
+        return parse_windows(self.config_entry.options.get(_OPTION_KEY[direction]))
 
-    def _save(self, windows: list[TariffWindow]) -> ConfigFlowResult:
-        """Persist the window list, preserving the other options."""
+    def _save(self, direction: str, windows: list[TariffWindow]) -> ConfigFlowResult:
+        """Persist one direction's windows, preserving the other options."""
         options = dict(self.config_entry.options)
-        options[CONF_WINDOWS_JSON] = _serialise(windows)
+        options[_OPTION_KEY[direction]] = [window.as_dict() for window in windows]
         return self.async_create_entry(data=options)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Show the options menu."""
-        windows = self._windows()
-        menu = [MENU_SUPPLY, MENU_ADD]
-        if windows:
-            menu += [MENU_EDIT, MENU_REMOVE]
+        menu = [MENU_SUPPLY, MENU_ADD_IMPORT, MENU_ADD_EXPORT]
+        if self._windows(DIRECTION_IMPORT):
+            menu += [MENU_EDIT_IMPORT, MENU_REMOVE_IMPORT]
+        if self._windows(DIRECTION_EXPORT):
+            menu += [MENU_EDIT_EXPORT, MENU_REMOVE_EXPORT]
 
         return self.async_show_menu(step_id="init", menu_options=menu)
 
@@ -162,7 +153,7 @@ class TariffOptionsFlow(OptionsFlow):
         )
         return self.async_show_form(step_id=MENU_SUPPLY, data_schema=schema)
 
-    # -- add / edit --------------------------------------------------------
+    # -- window forms ------------------------------------------------------
 
     def _window_schema(self, defaults: dict[str, Any] | None = None) -> vol.Schema:
         """Build the window form, optionally pre-filled.
@@ -193,64 +184,54 @@ class TariffOptionsFlow(OptionsFlow):
             {
                 field(FIELD_START): selector.TimeSelector(),
                 field(FIELD_END): selector.TimeSelector(),
-                field(FIELD_IMPORT_RATE): number,
-                field(FIELD_EXPORT_RATE): number,
+                field(FIELD_RATE): number,
             }
         )
 
-    async def _async_save_window(
+    async def _async_add(
         self,
-        user_input: dict[str, Any],
-        windows: list[TariffWindow],
-        replace_index: int | None = None,
+        direction: str,
+        step_id: str,
+        user_input: dict[str, Any] | None,
     ) -> ConfigFlowResult:
-        """Validate and store a window, then finish."""
-        start, end = user_input[FIELD_START], user_input[FIELD_END]
-        if start == end:
+        """Add a window for one direction."""
+        if user_input is None:
             return self.async_show_form(
-                step_id=MENU_ADD if replace_index is None else MENU_EDIT,
+                step_id=step_id, data_schema=self._window_schema()
+            )
+
+        if user_input[FIELD_START] == user_input[FIELD_END]:
+            return self.async_show_form(
+                step_id=step_id,
                 data_schema=self._window_schema(user_input),
                 errors={"base": "zero_length_window"},
             )
 
-        candidate = TariffWindow(
-            start=_to_time(start),
-            end=_to_time(end),
-            import_rate=float(user_input[FIELD_IMPORT_RATE]),
-            export_rate=float(user_input[FIELD_EXPORT_RATE]),
+        window = TariffWindow(
+            start=_to_time(user_input[FIELD_START]),
+            end=_to_time(user_input[FIELD_END]),
+            rate=float(user_input[FIELD_RATE]),
         )
+        return self._save(direction, [*self._windows(direction), window])
 
-        if replace_index is None:
-            updated = [*windows, candidate]
-        else:
-            updated = list(windows)
-            updated[replace_index] = candidate
-
-        return self._save(updated)
-
-    async def async_step_add_window(
-        self, user_input: dict[str, Any] | None = None
+    async def _async_edit_pick(
+        self, direction: str, step_id: str, user_input: dict[str, Any] | None
     ) -> ConfigFlowResult:
-        """Add a window."""
-        if user_input is not None:
-            return await self._async_save_window(user_input, self._windows())
-        return self.async_show_form(step_id=MENU_ADD, data_schema=self._window_schema())
-
-    async def async_step_edit_window(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Pick a window, then edit it."""
-        windows = self._windows()
+        """Pick which window of a direction to edit."""
+        windows = self._windows(direction)
         if not windows:
             return self.async_abort(reason="no_windows")
 
         labels = [_window_label(window) for window in windows]
         if user_input is not None:
+            self._edit_direction = direction
             self._edit_index = labels.index(user_input["window"])
-            return await self.async_step_edit_window_details()
+            return await self._async_edit_details(
+                direction, f"{step_id}_details", None
+            )
 
         return self.async_show_form(
-            step_id=MENU_EDIT,
+            step_id=step_id,
             data_schema=vol.Schema(
                 {
                     vol.Required("window"): selector.SelectSelector(
@@ -263,42 +244,55 @@ class TariffOptionsFlow(OptionsFlow):
             ),
         )
 
-    async def async_step_edit_window_details(
-        self, user_input: dict[str, Any] | None = None
+    async def _async_edit_details(
+        self, direction: str, step_id: str, user_input: dict[str, Any] | None
     ) -> ConfigFlowResult:
-        """Edit the selected window."""
-        windows = self._windows()
+        """Edit the window picked in the previous step."""
+        windows = self._windows(direction)
         index = self._edit_index
         window = windows[index]
+
         if user_input is not None:
-            return await self._async_save_window(user_input, windows, replace_index=index)
+            if user_input[FIELD_START] == user_input[FIELD_END]:
+                return self.async_show_form(
+                    step_id=step_id,
+                    data_schema=self._window_schema(user_input),
+                    errors={"base": "zero_length_window"},
+                )
+            updated = list(windows)
+            updated[index] = TariffWindow(
+                start=_to_time(user_input[FIELD_START]),
+                end=_to_time(user_input[FIELD_END]),
+                rate=float(user_input[FIELD_RATE]),
+            )
+            return self._save(direction, updated)
 
         defaults = {
             FIELD_START: window.start.strftime("%H:%M:%S"),
             FIELD_END: window.end.strftime("%H:%M:%S"),
-            FIELD_IMPORT_RATE: window.import_rate,
-            FIELD_EXPORT_RATE: window.export_rate,
+            FIELD_RATE: window.rate,
         }
         return self.async_show_form(
-            step_id="edit_window_details", data_schema=self._window_schema(defaults)
+            step_id=step_id, data_schema=self._window_schema(defaults)
         )
 
-    async def async_step_remove_window(
-        self, user_input: dict[str, Any] | None = None
+    async def _async_remove(
+        self, direction: str, step_id: str, user_input: dict[str, Any] | None
     ) -> ConfigFlowResult:
-        """Pick a window and remove it."""
-        windows = self._windows()
+        """Pick which window of a direction to remove."""
+        windows = self._windows(direction)
         if not windows:
             return self.async_abort(reason="no_windows")
 
         labels = [_window_label(window) for window in windows]
         if user_input is not None:
             index = labels.index(user_input["window"])
-            remaining = [w for i, w in enumerate(windows) if i != index]
-            return self._save(remaining)
+            return self._save(
+                direction, [w for i, w in enumerate(windows) if i != index]
+            )
 
         return self.async_show_form(
-            step_id=MENU_REMOVE,
+            step_id=step_id,
             data_schema=vol.Schema(
                 {
                     vol.Required("window"): selector.SelectSelector(
@@ -309,4 +303,68 @@ class TariffOptionsFlow(OptionsFlow):
                     )
                 }
             ),
+        )
+
+    # -- import windows ----------------------------------------------------
+
+    async def async_step_add_import_window(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Add an import window."""
+        return await self._async_add(DIRECTION_IMPORT, MENU_ADD_IMPORT, user_input)
+
+    async def async_step_edit_import_window(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit an import window."""
+        return await self._async_edit_pick(
+            DIRECTION_IMPORT, MENU_EDIT_IMPORT, user_input
+        )
+
+    async def async_step_edit_import_window_details(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit the picked import window."""
+        return await self._async_edit_details(
+            DIRECTION_IMPORT, "edit_import_window_details", user_input
+        )
+
+    async def async_step_remove_import_window(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Remove an import window."""
+        return await self._async_remove(
+            DIRECTION_IMPORT, MENU_REMOVE_IMPORT, user_input
+        )
+
+    # -- export windows ----------------------------------------------------
+
+    async def async_step_add_export_window(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Add an export window."""
+        return await self._async_add(DIRECTION_EXPORT, MENU_ADD_EXPORT, user_input)
+
+    async def async_step_edit_export_window(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit an export window."""
+        return await self._async_edit_pick(
+            DIRECTION_EXPORT, MENU_EDIT_EXPORT, user_input
+        )
+
+    async def async_step_edit_export_window_details(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit the picked export window."""
+        return await self._async_edit_details(
+            DIRECTION_EXPORT, "edit_export_window_details", user_input
+        )
+
+    async def async_step_remove_export_window(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Remove an export window."""
+        return await self._async_remove(
+            DIRECTION_EXPORT, MENU_REMOVE_EXPORT, user_input
         )

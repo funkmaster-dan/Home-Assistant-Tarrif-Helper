@@ -23,6 +23,8 @@ from .const import (
     ATTR_ACTIVE_WINDOW,
     ATTR_WINDOWS,
     CONF_METER_NAME,
+    DIRECTION_EXPORT,
+    DIRECTION_IMPORT,
     DOMAIN,
     KEY_EXPORT_RATE,
     KEY_IMPORT_RATE,
@@ -30,6 +32,7 @@ from .const import (
     KEY_SUPPLY_CHARGE_TOTAL,
 )
 from .coordinator import TariffCoordinator
+from .tariff import TariffWindow
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -37,7 +40,7 @@ class TariffSensorEntityDescription(SensorEntityDescription):
     """Describes a tariff sensor and how to read its value."""
 
     value_fn: Callable[[TariffCoordinator], float]
-    include_window_attributes: bool = False
+    direction: str | None = None
 
 
 RATE_SENSORS: tuple[TariffSensorEntityDescription, ...] = (
@@ -48,7 +51,7 @@ RATE_SENSORS: tuple[TariffSensorEntityDescription, ...] = (
         device_class=None,
         suggested_display_precision=4,
         value_fn=lambda coordinator: coordinator.import_rate,
-        include_window_attributes=True,
+        direction=DIRECTION_IMPORT,
     ),
     TariffSensorEntityDescription(
         key=KEY_EXPORT_RATE,
@@ -57,7 +60,7 @@ RATE_SENSORS: tuple[TariffSensorEntityDescription, ...] = (
         device_class=None,
         suggested_display_precision=4,
         value_fn=lambda coordinator: coordinator.export_rate,
-        include_window_attributes=True,
+        direction=DIRECTION_EXPORT,
     ),
 )
 
@@ -126,6 +129,24 @@ class TariffSensor(CoordinatorEntity[TariffCoordinator], SensorEntity):
         )
 
     @property
+    def _own_windows(self) -> list[TariffWindow]:
+        """Return the schedule belonging to this sensor's direction."""
+        if self.entity_description.direction == DIRECTION_IMPORT:
+            return self.coordinator.import_windows
+        if self.entity_description.direction == DIRECTION_EXPORT:
+            return self.coordinator.export_windows
+        return []
+
+    @property
+    def _own_active(self) -> TariffWindow | None:
+        """Return the active window belonging to this sensor's direction."""
+        if self.entity_description.direction == DIRECTION_IMPORT:
+            return self.coordinator.active_import
+        if self.entity_description.direction == DIRECTION_EXPORT:
+            return self.coordinator.active_export
+        return None
+
+    @property
     def native_unit_of_measurement(self) -> str:
         """Return the unit, derived from the HA currency configuration."""
         currency = self.hass.config.currency
@@ -142,22 +163,14 @@ class TariffSensor(CoordinatorEntity[TariffCoordinator], SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Expose the active window and the full schedule on rate sensors."""
-        if not self.entity_description.include_window_attributes:
+        """Expose this sensor's own active window and full schedule."""
+        if self.entity_description.direction is None:
             return None
 
-        active = self.coordinator.active
+        active = self._own_active
         return {
             ATTR_ACTIVE_WINDOW: (
                 f"{active.start:%H:%M}-{active.end:%H:%M}" if active else None
             ),
-            ATTR_WINDOWS: [
-                {
-                    "start": f"{window.start:%H:%M}",
-                    "end": f"{window.end:%H:%M}",
-                    "import_rate": window.import_rate,
-                    "export_rate": window.export_rate,
-                }
-                for window in self.coordinator.windows
-            ],
+            ATTR_WINDOWS: [window.as_dict() for window in self._own_windows],
         }

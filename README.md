@@ -15,13 +15,17 @@ not accumulate costs, and does not replace the Energy dashboard's own cost engin
 | `sensor.<meter>_supply_charge` | `AUD/day` | Your fixed daily supply charge. |
 | `sensor.<meter>_supply_charge_total` | `AUD` | Cumulative supply charge since setup. |
 
-The two rate sensors also expose attributes:
+The two rate sensors also expose attributes, each reflecting its own direction:
 
-- `active_window`: `"HH:MM-HH:MM"` of the window currently in effect, or `null`.
-- `windows`: the full configured schedule, so templates and automations can read
+- `active_window`: `"HH:MM-HH:MM"` of the window currently in effect for that
+  direction, or `null`.
+- `windows`: that direction's full schedule, so templates and automations can read
   future windows without extra entities.
 
-If no window matches the current time, both rates read `0.0`.
+So `sensor.<meter>_import_rate` lists your import windows and
+`sensor.<meter>_export_rate` lists your export windows.
+
+If no window matches the current time, that direction's rate reads `0.0`.
 
 ## Install
 
@@ -44,10 +48,13 @@ directory and restart Home Assistant.
 3. Open the integration's **Options**. You get a menu:
 
    - **Set the daily supply charge** — a fixed amount billed per day, in `AUD/day`.
-   - **Add a tariff window** — pick a start time, an end time, and the import and
-     export rates.
-   - **Edit a tariff window** — choose one from the list and change it.
-   - **Remove a tariff window** — choose one from the list and delete it.
+   - **Add / Edit / Remove an import window** — the periods and rates you pay to
+     import.
+   - **Add / Edit / Remove an export window** — the periods and rates you are paid
+     to export.
+
+Import and export are separate schedules, so you can model a two-tier import
+tariff and a flat feed-in tariff, or any other combination.
 
 ### How windows behave
 
@@ -55,7 +62,7 @@ directory and restart Home Assistant.
 - If the end time is earlier than the start time, the window spans midnight —
   so `23:00 → 07:00` covers 11pm through 7am the next morning.
 - When windows overlap, the **earliest-listed** match wins.
-- If no window matches the current time, both rates read `0.0`.
+- If no window matches the current time, that direction's rate reads `0.0`.
 
 Changes take effect immediately; no restart needed.
 

@@ -19,9 +19,12 @@
         "title": "Energy Tariff Helper",
         "menu_options": {
           "supply_charge": "Set the daily supply charge",
-          "add_window": "Add a tariff window",
-          "edit_window": "Edit a tariff window",
-          "remove_window": "Remove a tariff window"
+          "add_import_window": "Add an import window",
+          "edit_import_window": "Edit an import window",
+          "remove_import_window": "Remove an import window",
+          "add_export_window": "Add an export window",
+          "edit_export_window": "Edit an export window",
+          "remove_export_window": "Remove an export window"
         }
       },
       "supply_charge": {
@@ -31,36 +34,66 @@
           "supply_charge": "Daily supply charge"
         }
       },
-      "add_window": {
-        "title": "Add a tariff window",
-        "description": "A recurring daily period. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
+      "add_import_window": {
+        "title": "Add an import window",
+        "description": "A recurring daily period when you pay this import rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
         "data": {
           "start": "Start time",
           "end": "End time",
-          "import_rate": "Import rate",
-          "export_rate": "Export rate"
+          "rate": "Import rate"
         }
       },
-      "edit_window": {
-        "title": "Edit a tariff window",
-        "description": "Pick the window to change.",
+      "edit_import_window": {
+        "title": "Edit an import window",
+        "description": "Pick the import window to change.",
         "data": {
           "window": "Window"
         }
       },
-      "edit_window_details": {
-        "title": "Edit tariff window",
-        "description": "A recurring daily period. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
+      "edit_import_window_details": {
+        "title": "Edit import window",
+        "description": "A recurring daily period when you pay this import rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
         "data": {
           "start": "Start time",
           "end": "End time",
-          "import_rate": "Import rate",
-          "export_rate": "Export rate"
+          "rate": "Import rate"
         }
       },
-      "remove_window": {
-        "title": "Remove a tariff window",
-        "description": "Pick the window to remove.",
+      "remove_import_window": {
+        "title": "Remove an import window",
+        "description": "Pick the import window to remove.",
+        "data": {
+          "window": "Window"
+        }
+      },
+      "add_export_window": {
+        "title": "Add an export window",
+        "description": "A recurring daily period when you are paid this export rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
+        "data": {
+          "start": "Start time",
+          "end": "End time",
+          "rate": "Export rate"
+        }
+      },
+      "edit_export_window": {
+        "title": "Edit an export window",
+        "description": "Pick the export window to change.",
+        "data": {
+          "window": "Window"
+        }
+      },
+      "edit_export_window_details": {
+        "title": "Edit export window",
+        "description": "A recurring daily period when you are paid this export rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight.",
+        "data": {
+          "start": "Start time",
+          "end": "End time",
+          "rate": "Export rate"
+        }
+      },
+      "remove_export_window": {
+        "title": "Remove an export window",
+        "description": "Pick the export window to remove.",
         "data": {
           "window": "Window"
         }
@@ -70,7 +103,7 @@
       "zero_length_window": "The start and end times must be different."
     },
     "abort": {
-      "no_windows": "There are no tariff windows configured."
+      "no_windows": "There are no windows configured for that direction."
     }
   },
   "entity": {

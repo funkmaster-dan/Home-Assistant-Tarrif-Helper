@@ -1,8 +1,8 @@
 """DataUpdateCoordinator for the Energy Tariff Helper integration.
 
-Owns the one-minute tick that re-evaluates which tariff window is active. No
-network I/O happens here: ``_async_update_data`` is a pure recompute, so it can
-never fail.
+Owns the one-minute tick that re-evaluates which tariff window is active for
+each direction. Import and export schedules are independent. No network I/O
+happens here: ``_async_update_data`` is a pure recompute, so it can never fail.
 """
 
 from __future__ import annotations
@@ -30,7 +30,8 @@ class TariffCoordinator(DataUpdateCoordinator[None]):
         self,
         hass: HomeAssistant,
         entry: ConfigEntry,
-        windows: list[TariffWindow],
+        import_windows: list[TariffWindow],
+        export_windows: list[TariffWindow],
         supply_charge: float,
         start_date: date,
     ) -> None:
@@ -41,20 +42,26 @@ class TariffCoordinator(DataUpdateCoordinator[None]):
             name=f"{DOMAIN} {entry.entry_id}",
             update_interval=UPDATE_INTERVAL,
         )
-        self.windows = windows
+        self.import_windows = import_windows
+        self.export_windows = export_windows
         self.supply_charge = supply_charge
         self.start_date = start_date
 
     async def _async_update_data(self) -> None:
-        """Recompute the active window.
+        """Recompute the active windows.
 
         Entities read the properties below, so there is nothing to return.
         """
         return None
 
-    def async_set_windows(self, windows: list[TariffWindow]) -> None:
-        """Replace the schedule and push fresh state to listeners."""
-        self.windows = windows
+    def async_set_windows(
+        self,
+        import_windows: list[TariffWindow],
+        export_windows: list[TariffWindow],
+    ) -> None:
+        """Replace both schedules and push fresh state to listeners."""
+        self.import_windows = import_windows
+        self.export_windows = export_windows
         self.async_set_updated_data(None)
 
     def async_set_supply_charge(self, supply_charge: float) -> None:
@@ -63,24 +70,26 @@ class TariffCoordinator(DataUpdateCoordinator[None]):
         self.async_set_updated_data(None)
 
     @property
-    def active(self) -> TariffWindow | None:
-        """Return the window in effect right now, if any.
+    def active_import(self) -> TariffWindow | None:
+        """Return the import window in effect right now, if any."""
+        return active_window(self.import_windows, dt_util.now().time())
 
-        Uses local wall-clock time because windows are wall-clock periods.
-        """
-        return active_window(self.windows, dt_util.now().time())
+    @property
+    def active_export(self) -> TariffWindow | None:
+        """Return the export window in effect right now, if any."""
+        return active_window(self.export_windows, dt_util.now().time())
 
     @property
     def import_rate(self) -> float:
         """Return the current import rate in currency/kWh."""
-        window = self.active
-        return window.import_rate if window else DEFAULT_RATE
+        window = self.active_import
+        return window.rate if window else DEFAULT_RATE
 
     @property
     def export_rate(self) -> float:
         """Return the current export rate in currency/kWh."""
-        window = self.active
-        return window.export_rate if window else DEFAULT_RATE
+        window = self.active_export
+        return window.rate if window else DEFAULT_RATE
 
     @property
     def days_elapsed(self) -> int:
