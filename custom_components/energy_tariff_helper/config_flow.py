@@ -50,7 +50,9 @@ from .const import (
 from .tariff import TariffWindow
 
 
-def _window_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+def _window_schema(
+    currency: str, defaults: dict[str, Any] | None = None
+) -> vol.Schema:
     """Build the window form, optionally pre-filled.
 
     ``default`` is only attached when a value exists: a ``None`` default on a
@@ -65,6 +67,7 @@ def _window_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             # finest granularity a rate can be entered with.
             step=0.001,
             mode=selector.NumberSelectorMode.BOX,
+            unit_of_measurement=f"{currency}/kWh",
         )
     )
 
@@ -210,13 +213,15 @@ class TariffWindowSubentryFlow(ConfigSubentryFlow):
             if user_input[CONF_START] == user_input[CONF_END]:
                 return self.async_show_form(
                     step_id="user",
-                    data_schema=_window_schema(user_input),
+                    data_schema=_window_schema(self.hass.config.currency, user_input),
                     errors={"base": "zero_length_window"},
                 )
             window = _to_window(user_input)
             return self.async_create_entry(title=window.label, data=window.as_dict())
 
-        return self.async_show_form(step_id="user", data_schema=_window_schema())
+        return self.async_show_form(
+            step_id="user", data_schema=_window_schema(self.hass.config.currency)
+        )
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
@@ -228,7 +233,7 @@ class TariffWindowSubentryFlow(ConfigSubentryFlow):
             if user_input[CONF_START] == user_input[CONF_END]:
                 return self.async_show_form(
                     step_id="reconfigure",
-                    data_schema=_window_schema(user_input),
+                    data_schema=_window_schema(self.hass.config.currency, user_input),
                     errors={"base": "zero_length_window"},
                 )
             window = _to_window(user_input)
@@ -244,5 +249,7 @@ class TariffWindowSubentryFlow(ConfigSubentryFlow):
 
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=_window_schema(dict(subentry.data)),
+            data_schema=_window_schema(
+                self.hass.config.currency, dict(subentry.data)
+            ),
         )
