@@ -8,7 +8,7 @@ happens here: ``_async_update_data`` is a pure recompute, so it can never fail.
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import date, time as dt_time, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -19,6 +19,14 @@ from .const import DEFAULT_RATE, DOMAIN
 from .tariff import GstSettings, TariffWindow, active_window
 
 UPDATE_INTERVAL = timedelta(minutes=1)
+
+# The day's supply charge is applied a little after local midnight rather than
+# exactly on it. Home Assistant buckets statistics by UTC hour, which in a
+# half-hour-offset timezone (ACST, +09:30) puts a bucket boundary on local
+# midnight; an increase landing there is recorded against the previous day, so
+# the charge appeared a day late in daily totals. Applying it once the day is
+# under way keeps it on the day it belongs to.
+DAY_CHARGE_AFTER = dt_time(0, 30)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -106,14 +114,26 @@ class TariffCoordinator(DataUpdateCoordinator[None]):
         return self.base_supply_charge * self.gst.supply_charge_multiplier()
 
     @property
+    def billing_date(self) -> date:
+        """Return the day whose supply charge is currently in effect.
+
+        Until ``DAY_CHARGE_AFTER`` the previous day is still in effect, so the
+        charge for a day is applied once that day is under way rather than on the
+        boundary, where it would be recorded against the previous day.
+        """
+        now = dt_util.now()
+        if now.time() < DAY_CHARGE_AFTER:
+            return now.date() - timedelta(days=1)
+        return now.date()
+
+    @property
     def days_billed(self) -> int:
         """Return the number of days billed, counting the current day.
 
-        The supply charge applies from the start of each day, so the current day
-        is included as soon as it begins and the setup day counts as day one
-        even though the integration may have been added partway through it.
+        The setup day counts as day one even if the integration was added
+        partway through it, and the count never decreases.
         """
-        return max(1, (dt_util.now().date() - self.start_date).days + 1)
+        return max(1, (self.billing_date - self.start_date).days + 1)
 
     @property
     def supply_charge_total(self) -> float:
