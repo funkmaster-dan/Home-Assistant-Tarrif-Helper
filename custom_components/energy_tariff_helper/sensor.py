@@ -13,7 +13,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory
+from homeassistant.const import EntityCategory, UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -23,6 +23,7 @@ from .const import (
     ATTR_ACTIVE_WINDOW,
     ATTR_GST_MULTIPLIER,
     ATTR_WINDOWS,
+    COMPONENT_SUPPLY_CHARGE,
     CONF_METER_NAME,
     DIRECTION_EXPORT,
     DIRECTION_IMPORT,
@@ -30,7 +31,9 @@ from .const import (
     KEY_EXPORT_RATE,
     KEY_IMPORT_RATE,
     KEY_SUPPLY_CHARGE,
+    KEY_SUPPLY_CHARGE_ENERGY,
     KEY_SUPPLY_CHARGE_TOTAL,
+    PLACEHOLDER_ENERGY_KWH,
 )
 from .coordinator import TariffCoordinator
 from .tariff import TariffWindow
@@ -42,6 +45,9 @@ class TariffSensorEntityDescription(SensorEntityDescription):
 
     value_fn: Callable[[TariffCoordinator], float]
     direction: str | None = None
+    # Which tax multiplier this sensor reports, or None when tax is not
+    # meaningful for it (the energy placeholder carries no charge).
+    gst_component: str | None = None
 
 
 RATE_SENSORS: tuple[TariffSensorEntityDescription, ...] = (
@@ -53,6 +59,7 @@ RATE_SENSORS: tuple[TariffSensorEntityDescription, ...] = (
         suggested_display_precision=4,
         value_fn=lambda coordinator: coordinator.import_rate,
         direction=DIRECTION_IMPORT,
+        gst_component=DIRECTION_IMPORT,
     ),
     TariffSensorEntityDescription(
         key=KEY_EXPORT_RATE,
@@ -62,6 +69,7 @@ RATE_SENSORS: tuple[TariffSensorEntityDescription, ...] = (
         suggested_display_precision=4,
         value_fn=lambda coordinator: coordinator.export_rate,
         direction=DIRECTION_EXPORT,
+        gst_component=DIRECTION_EXPORT,
     ),
 )
 
@@ -74,6 +82,7 @@ SUPPLY_SENSORS: tuple[TariffSensorEntityDescription, ...] = (
         suggested_display_precision=2,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda coordinator: coordinator.supply_charge,
+        gst_component=COMPONENT_SUPPLY_CHARGE,
     ),
     TariffSensorEntityDescription(
         key=KEY_SUPPLY_CHARGE_TOTAL,
@@ -86,6 +95,17 @@ SUPPLY_SENSORS: tuple[TariffSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.MONETARY,
         suggested_display_precision=2,
         value_fn=lambda coordinator: coordinator.supply_charge_total,
+        gst_component=COMPONENT_SUPPLY_CHARGE,
+    ),
+    TariffSensorEntityDescription(
+        key=KEY_SUPPLY_CHARGE_ENERGY,
+        translation_key=KEY_SUPPLY_CHARGE_ENERGY,
+        # Pinned to zero so the Energy dashboard has an energy entity to hang
+        # the supply charge cost on without it affecting energy totals.
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        device_class=SensorDeviceClass.ENERGY,
+        suggested_display_precision=2,
+        value_fn=lambda coordinator: PLACEHOLDER_ENERGY_KWH,
     ),
 )
 
@@ -155,6 +175,8 @@ class TariffSensor(CoordinatorEntity[TariffCoordinator], SensorEntity):
             return f"{currency}/day"
         if self.entity_description.key == KEY_SUPPLY_CHARGE_TOTAL:
             return currency
+        if self.entity_description.key == KEY_SUPPLY_CHARGE_ENERGY:
+            return UnitOfEnergy.KILO_WATT_HOUR
         return f"{currency}/kWh"
 
     @property
@@ -163,14 +185,16 @@ class TariffSensor(CoordinatorEntity[TariffCoordinator], SensorEntity):
         return self.entity_description.value_fn(self.coordinator)
 
     @property
-    def _gst_multiplier(self) -> float:
+    def _gst_multiplier(self) -> float | None:
         """Return the tax multiplier applied to this sensor's value."""
-        direction = self.entity_description.direction
-        if direction == DIRECTION_IMPORT:
+        component = self.entity_description.gst_component
+        if component == DIRECTION_IMPORT:
             return self.coordinator.gst.import_multiplier()
-        if direction == DIRECTION_EXPORT:
+        if component == DIRECTION_EXPORT:
             return self.coordinator.gst.export_multiplier()
-        return self.coordinator.gst.supply_charge_multiplier()
+        if component == COMPONENT_SUPPLY_CHARGE:
+            return self.coordinator.gst.supply_charge_multiplier()
+        return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -179,7 +203,9 @@ class TariffSensor(CoordinatorEntity[TariffCoordinator], SensorEntity):
         The schedule lists the rates as configured, so the multiplier is what
         explains any difference between those and the sensor's value.
         """
-        attributes: dict[str, Any] = {ATTR_GST_MULTIPLIER: self._gst_multiplier}
+        attributes: dict[str, Any] = {}
+        if (multiplier := self._gst_multiplier) is not None:
+            attributes[ATTR_GST_MULTIPLIER] = multiplier
 
         if self.entity_description.direction is None:
             return attributes

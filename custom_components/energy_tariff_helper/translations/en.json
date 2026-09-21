@@ -123,6 +123,9 @@
       },
       "supply_charge_total": {
         "name": "Supply charge total"
+      },
+      "supply_charge_energy": {
+        "name": "Supply charge placeholder"
       }
     }
   }

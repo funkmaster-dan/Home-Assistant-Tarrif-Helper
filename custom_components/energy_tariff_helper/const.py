@@ -44,10 +44,20 @@ KEY_IMPORT_RATE: Final = "import_rate"
 KEY_EXPORT_RATE: Final = "export_rate"
 KEY_SUPPLY_CHARGE: Final = "supply_charge"
 KEY_SUPPLY_CHARGE_TOTAL: Final = "supply_charge_total"
+KEY_SUPPLY_CHARGE_ENERGY: Final = "supply_charge_energy"
+
+# The Energy dashboard has no field for a fixed daily charge, so the supply
+# charge is attached to a grid source instead: this placeholder provides the
+# energy side and supply_charge_total provides the cost side. It always reads
+# zero, so it never affects energy totals.
+PLACEHOLDER_ENERGY_KWH: Final = 0.0
 
 # Tariff directions
 DIRECTION_IMPORT: Final = "import"
 DIRECTION_EXPORT: Final = "export"
+
+# Tariff components that can have tax applied independently.
+COMPONENT_SUPPLY_CHARGE: Final = "supply_charge"
 
 SUBENTRY_TYPE_BY_DIRECTION: Final = {
     DIRECTION_IMPORT: SUBENTRY_TYPE_IMPORT,

@@ -14,6 +14,10 @@ not accumulate costs, and does not replace the Energy dashboard's own cost engin
 | `sensor.<meter>_export_rate` | `AUD/kWh` | Rate you are paid to export right now. |
 | `sensor.<meter>_supply_charge` | `AUD/day` | Your fixed daily supply charge. |
 | `sensor.<meter>_supply_charge_total` | `AUD` | Cumulative supply charge since setup. |
+| `sensor.<meter>_supply_charge_energy` | `kWh` | Always `0`; exists to carry the supply charge in the Energy dashboard. |
+
+Every sensor reports values **including tax** where you have enabled it, and
+carries a `gst_multiplier` attribute (`1.0` when tax is off for that component).
 
 The two rate sensors also expose attributes, each reflecting its own direction:
 
@@ -101,26 +105,21 @@ The Energy dashboard can compute costs directly from the rate sensors:
 ### Adding the fixed daily supply charge
 
 Home Assistant's Energy dashboard has no built-in field for a fixed daily charge —
-its cost engine only ever multiplies energy by price. The supported workaround is a
-dedicated grid source that carries the charge as a cumulative cost:
+its cost engine only ever multiplies energy by price. The integration therefore
+provides a matching pair of entities for a dedicated grid source:
 
-1. Create a placeholder energy entity, pinned to `0` kWh. **Settings → Devices &
-   Services → Helpers → Create helper → Template → Sensor**:
+| Entity | Role |
+| --- | --- |
+| `sensor.<meter>_supply_charge_energy` | always `0 kWh`, so it adds nothing to your energy totals |
+| `sensor.<meter>_supply_charge_total` | the cumulative supply charge in `AUD` |
 
-   | Field | Value |
-   | --- | --- |
-   | Name | `Daily supply charge` |
-   | State template | `{{ 0 }}` |
-   | Unit of measurement | `kWh` |
-   | Device class | `energy` |
-   | State class | `total_increasing` |
+Wire them up in **Settings → Dashboards → Energy → Grid → Add grid source**:
 
-2. **Settings → Dashboards → Energy → Grid → Add grid source**, and set:
-   - **Grid consumption** → the placeholder entity (`sensor.daily_supply_charge`)
-   - **"entity tracking the total costs"** → `sensor.<meter>_supply_charge_total`
+- **Grid consumption** → `sensor.<meter>_supply_charge_energy`
+- **"entity tracking the total costs"** → `sensor.<meter>_supply_charge_total`
 
-Because the placeholder always reads `0` kWh, it adds nothing to your energy
-totals, while its cost is added to the dashboard's cost figures.
+The dashboard then adds your daily charge to its cost figures without touching
+your energy totals.
 
 The total applies the charge **from the start of each day**, so the current day is
 included as soon as it begins and the charge for a given day is recorded on that
