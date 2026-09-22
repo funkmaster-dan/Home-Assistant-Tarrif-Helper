@@ -10,14 +10,19 @@ not accumulate costs, and does not replace the Energy dashboard's own cost engin
 
 | Entity | Unit | Meaning |
 | --- | --- | --- |
-| `sensor.<meter>_import_rate` | `AUD/kWh` | Rate you pay to import right now. |
-| `sensor.<meter>_export_rate` | `AUD/kWh` | Rate you are paid to export right now. |
-| `sensor.<meter>_supply_charge` | `AUD/day` | Your fixed daily supply charge. |
-| `sensor.<meter>_supply_charge_total` | `AUD` | Cumulative supply charge since setup. |
+| `sensor.<meter>_import_rate` | `<currency>/kWh` | Rate you pay to import right now. |
+| `sensor.<meter>_export_rate` | `<currency>/kWh` | Rate you are paid to export right now. |
+| `sensor.<meter>_supply_charge` | `<currency>/day` | Your fixed daily supply charge. |
+| `sensor.<meter>_supply_charge_total` | `<currency>` | Supply charge accrued since setup; grows continuously. |
 | `sensor.<meter>_supply_charge_energy` | `kWh` | Always `0`; exists to carry the supply charge in the Energy dashboard. |
 
-Every sensor reports values **including tax** where you have enabled it, and
-carries a `gst_multiplier` attribute (`1.0` when tax is off for that component).
+`<currency>` is whatever currency your Home Assistant is configured with (`AUD`
+in the examples below).
+
+The rate and supply charge sensors report values **including tax** where you
+have enabled it, and carry a `gst_multiplier` attribute (`1.0` when tax is off
+for that component). The zero-valued `supply_charge_energy` placeholder carries
+no charge, so it has no such attribute.
 
 The two rate sensors also expose attributes, each reflecting its own direction:
 
@@ -76,8 +81,8 @@ all report **tax-inclusive** values once enabled, so the Energy dashboard's cost
 figures include tax. All toggles are **off by default**, so upgrading never
 changes your reported rates.
 
-Every sensor carries a `gst_multiplier` attribute (`1.0` when tax is off for that
-component) explaining any difference from the rates you entered.
+Every priced sensor carries a `gst_multiplier` attribute (`1.0` when tax is off
+for that component) explaining any difference from the rates you entered.
 
 Import and export are separate schedules, so you can model a two-tier import
 tariff and a flat feed-in tariff, or any other combination.
@@ -87,6 +92,8 @@ tariff and a flat feed-in tariff, or any other combination.
 - `start` is inclusive, `end` is exclusive.
 - If the end time is earlier than the start time, the window spans midnight —
   so `23:00 → 07:00` covers 11pm through 7am the next morning.
+- If `start` and `end` are equal, the window covers the **whole day** — one
+  window is all you need for a flat rate.
 - When windows overlap, the **earliest-listed** match wins.
 - If no window matches the current time, that direction's rate reads `0.0`.
 
@@ -95,8 +102,7 @@ tariff and a flat feed-in tariff, or any other combination.
 The Energy dashboard can compute costs directly from the rate sensors:
 
 1. **Settings → Dashboards → Energy → Grid**.
-2. Set **"entity tracking total costs"**… instead, set the grid source's *energy
-   price* fields:
+2. On the grid source, set the *energy price* fields:
    - Import price → `sensor.<meter>_import_rate`
    - Export price → `sensor.<meter>_export_rate`
 
@@ -121,10 +127,11 @@ Wire them up in **Settings → Dashboards → Energy → Grid → Add grid sourc
 The dashboard then adds your daily charge to its cost figures without touching
 your energy totals.
 
-The total applies the charge **from the start of each day**, so the current day is
-included as soon as it begins and the charge for a given day is recorded on that
-day. The setup day counts as day one. The value only ever increases, so restarts
-are safe.
+The total accrues the charge **continuously from the moment the meter is set
+up**, so each day's cost is spread across that day instead of stepped on at its
+start. The value only ever increases: past accrual is never recalculated, so
+restarts are safe, and changing the supply charge or tax settings only shapes
+the total from the moment you apply it.
 
 Note that the cost field only exists on **grid** sources — individual devices
 cannot carry a cost entity.
@@ -133,5 +140,7 @@ cannot carry a cost entity.
 
 - Rates are stored as you enter them, **excluding tax**. Tax is applied only to
   the components you enable, as described above.
+- Rates may be **negative** — some wholesale plans pay you to import at times.
 - The active window is re-evaluated once a minute, so a rate change at a window
-  boundary appears within about a minute.
+  boundary appears within about a minute. The supply charge total accrues
+  continuously and is published on the same minute tick.
