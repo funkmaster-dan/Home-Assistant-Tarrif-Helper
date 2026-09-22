@@ -61,7 +61,9 @@ def _window_schema(
     defaults = defaults or {}
     number = selector.NumberSelector(
         selector.NumberSelectorConfig(
-            min=0,
+            # Negative rates are real on wholesale plans (you can be paid to
+            # import or forced to pay to export), so only the ceiling is capped.
+            min=-100,
             max=100,
             # HA's NumberSelector rejects a step below 1e-3, so 0.001 is the
             # finest granularity a rate can be entered with.
@@ -210,12 +212,6 @@ class TariffWindowSubentryFlow(ConfigSubentryFlow):
     ) -> SubentryFlowResult:
         """Add a window."""
         if user_input is not None:
-            if user_input[CONF_START] == user_input[CONF_END]:
-                return self.async_show_form(
-                    step_id="user",
-                    data_schema=_window_schema(self.hass.config.currency, user_input),
-                    errors={"base": "zero_length_window"},
-                )
             window = _to_window(user_input)
             return self.async_create_entry(title=window.label, data=window.as_dict())
 
@@ -230,12 +226,6 @@ class TariffWindowSubentryFlow(ConfigSubentryFlow):
         subentry: ConfigSubentry = self._get_reconfigure_subentry()
 
         if user_input is not None:
-            if user_input[CONF_START] == user_input[CONF_END]:
-                return self.async_show_form(
-                    step_id="reconfigure",
-                    data_schema=_window_schema(self.hass.config.currency, user_input),
-                    errors={"base": "zero_length_window"},
-                )
             window = _to_window(user_input)
             # async_update_and_abort, not async_update_reload_and_abort: this
             # entry registers update listeners, which the reload variant

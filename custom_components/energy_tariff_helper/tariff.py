@@ -34,7 +34,8 @@ class TariffWindow:
     """A recurring daily tariff window for one direction.
 
     ``start`` is inclusive, ``end`` is exclusive. A window whose ``start`` is
-    later than its ``end`` spans midnight (e.g. 23:00-07:00).
+    later than its ``end`` spans midnight (e.g. 23:00-07:00). Equal ``start``
+    and ``end`` covers the whole day (a flat tariff).
     """
 
     start: time
@@ -49,14 +50,16 @@ class TariffWindow:
     def as_dict(self) -> dict[str, Any]:
         """Return the storable representation."""
         return {
-            FIELD_START: self.start.strftime("%H:%M"),
-            FIELD_END: self.end.strftime("%H:%M"),
+            FIELD_START: self.start.strftime("%H:%M:%S"),
+            FIELD_END: self.end.strftime("%H:%M:%S"),
             FIELD_RATE: self.rate,
         }
 
     @property
     def label(self) -> str:
         """Return a short human label, used as the subentry title."""
+        if self.start == self.end:
+            return f"All day ({self.rate:g})"
         return f"{self.start:%H:%M}-{self.end:%H:%M} ({self.rate:g})"
 
 
@@ -76,8 +79,6 @@ def window_from_dict(raw: Any) -> TariffWindow | None:
         end = _parse_time(raw[FIELD_END])
         rate = float(raw[FIELD_RATE])
     except (KeyError, TypeError, ValueError):
-        return None
-    if start == end:
         return None
     return TariffWindow(start=start, end=end, rate=rate)
 
@@ -134,9 +135,10 @@ def split_legacy_windows(raw: Any) -> tuple[list[dict[str, Any]], list[dict[str,
         except (KeyError, TypeError, ValueError):
             _LOGGER.warning("Skipping malformed legacy window: %r", entry)
             continue
-        if start == end:
-            continue
-        base = {FIELD_START: start.strftime("%H:%M"), FIELD_END: end.strftime("%H:%M")}
+        base = {
+            FIELD_START: start.strftime("%H:%M:%S"),
+            FIELD_END: end.strftime("%H:%M:%S"),
+        }
         for field, target in (
             (_LEGACY_FIELD_IMPORT_RATE, import_windows),
             (_LEGACY_FIELD_EXPORT_RATE, export_windows),
@@ -188,6 +190,8 @@ class GstSettings:
 
 def window_matches(window: TariffWindow, t: time) -> bool:
     """Return True if ``t`` falls inside ``window``."""
+    if window.start == window.end:  # covers the whole day
+        return True
     if window.spans_midnight:
         return t >= window.start or t < window.end
     return window.start <= t < window.end
