@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, datetime, time as dt_time, timedelta
 from types import MappingProxyType
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -33,6 +34,7 @@ from .const import (
     DEFAULT_GST_PERCENT,
     DEFAULT_GST_SUPPLY_CHARGE,
     DOMAIN,
+    STORAGE_VERSION,
     SUBENTRY_TYPE_EXPORT,
     SUBENTRY_TYPE_IMPORT,
 )
@@ -50,6 +52,13 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor"]
 
 WINDOW_SUBENTRY_TYPES = (SUBENTRY_TYPE_IMPORT, SUBENTRY_TYPE_EXPORT)
+
+# Accrual ledger keys, persisted in one Store per config entry.
+KEY_ACCRUED_TOTAL = "accrued_total"
+KEY_ACCRUED_THROUGH = "accrued_through"
+
+# Migration only: 0.4.x billed whole days and stepped the total at 00:30 local.
+_LEGACY_DAY_CHARGE_AFTER = dt_time(0, 30)
 
 
 def gst_from_options(options: Mapping[str, Any]) -> GstSettings:
@@ -139,10 +148,49 @@ def _migrate_windows_to_subentries(
     return changed
 
 
+def _seed_accrual(
+    options: Mapping[str, Any], stored: Mapping[str, Any] | None, now: datetime
+) -> tuple[float, datetime]:
+    """Return the opening accrual ledger for a config entry.
+
+    Preference order: the persisted ledger; the 0.4.x whole-day formula, so an
+    upgrade never steps the total; zero for a fresh meter.
+    """
+    if stored and KEY_ACCRUED_TOTAL in stored and KEY_ACCRUED_THROUGH in stored:
+        through = dt_util.parse_datetime(str(stored[KEY_ACCRUED_THROUGH]))
+        if through is not None:
+            return float(stored[KEY_ACCRUED_TOTAL]), through
+
+    if CONF_START_DATE not in options:
+        return 0.0, now
+
+    # 0.4.x counted whole days and stepped the total at 00:30 local; replicate
+    # it once so recorded history and the ledger meet at the same value.
+    today = dt_util.now().date()
+    billing = today
+    if dt_util.now().time() < _LEGACY_DAY_CHARGE_AFTER:
+        billing -= timedelta(days=1)
+    days = max(1, (billing - date.fromisoformat(options[CONF_START_DATE])).days + 1)
+    charge = float(options.get(CONF_SUPPLY_CHARGE, 0.0)) * gst_from_options(
+        options
+    ).supply_charge_multiplier()
+    return days * charge, now
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Energy Tariff Helper from a config entry."""
     options = dict(entry.options)
     changed = _migrate_windows_to_subentries(hass, entry, options)
+
+    # Seed the accrual ledger before the setup date is stamped below: a fresh
+    # meter starts at zero, an upgraded one is seeded from the 0.4.x formula.
+    store: Store[dict[str, Any]] = Store(
+        hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}"
+    )
+    stored = await store.async_load()
+    accrued_total, accrued_through = _seed_accrual(
+        options, stored, dt_util.now(dt_util.UTC)
+    )
 
     if CONF_START_DATE not in options:
         # Persist the setup date so the cumulative supply charge total never
@@ -159,9 +207,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         import_windows=windows_for(entry, SUBENTRY_TYPE_IMPORT),
         export_windows=windows_for(entry, SUBENTRY_TYPE_EXPORT),
         supply_charge=options.get(CONF_SUPPLY_CHARGE, 0.0),
-        start_date=date.fromisoformat(
-            options.get(CONF_START_DATE, dt_util.now().date().isoformat())
-        ),
+        store=store,
+        accrued_total=accrued_total,
+        accrued_through=accrued_through,
         gst=gst_from_options(options),
     )
     await coordinator.async_config_entry_first_refresh()
@@ -178,7 +226,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        coordinator: TariffCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        await coordinator.async_flush_ledger()
     return unloaded
 
 

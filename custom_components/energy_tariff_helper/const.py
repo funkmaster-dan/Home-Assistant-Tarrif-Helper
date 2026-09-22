@@ -13,6 +13,9 @@ CONF_METER_NAME: Final = "meter_name"
 CONF_SUPPLY_CHARGE: Final = "supply_charge"  # float, currency/day (ex-GST)
 CONF_START_DATE: Final = "start_date"  # ISO "YYYY-MM-DD"; set once, persisted
 
+# Accrual ledger persistence: one Store per config entry in .storage.
+STORAGE_VERSION: Final = 1
+
 # GST options: one rate, applied to whichever components are enabled.
 CONF_GST_PERCENT: Final = "gst_percent"  # float, percent
 CONF_GST_IMPORT: Final = "gst_import"  # bool

@@ -1,17 +1,20 @@
 """DataUpdateCoordinator for the Energy Tariff Helper integration.
 
 Owns the one-minute tick that re-evaluates which tariff window is active for
-each direction. Import and export schedules are independent. No network I/O
-happens here: ``_async_update_data`` is a pure recompute, so it can never fail.
+each direction and folds the daily supply charge into the accrual ledger.
+Import and export schedules are independent. No network I/O happens here:
+``_async_update_data`` is a pure recompute, so it can never fail.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import date, time as dt_time, timedelta
+from datetime import datetime, timedelta
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -20,13 +23,9 @@ from .tariff import GstSettings, TariffWindow, active_window
 
 UPDATE_INTERVAL = timedelta(minutes=1)
 
-# The day's supply charge is applied a little after local midnight rather than
-# exactly on it. Home Assistant buckets statistics by UTC hour, which in a
-# half-hour-offset timezone (ACST, +09:30) puts a bucket boundary on local
-# midnight; an increase landing there is recorded against the previous day, so
-# the charge appeared a day late in daily totals. Applying it once the day is
-# under way keeps it on the day it belongs to.
-DAY_CHARGE_AFTER = dt_time(0, 30)
+# How often the accrual ledger must hit disk. A crash window costs nothing: the
+# ledger is timestamp based, so the gap is rebuilt from the persisted timestamp.
+SAVE_INTERVAL = timedelta(minutes=15)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,7 +40,9 @@ class TariffCoordinator(DataUpdateCoordinator[None]):
         import_windows: list[TariffWindow],
         export_windows: list[TariffWindow],
         supply_charge: float,
-        start_date: date,
+        store: Store[dict[str, Any]],
+        accrued_total: float,
+        accrued_through: datetime,
         gst: GstSettings | None = None,
     ) -> None:
         """Initialize the coordinator."""
@@ -54,14 +55,17 @@ class TariffCoordinator(DataUpdateCoordinator[None]):
         self.import_windows = import_windows
         self.export_windows = export_windows
         self.base_supply_charge = supply_charge
-        self.start_date = start_date
         self.gst = gst or GstSettings()
+        self._store = store
+        self.accrued_total = accrued_total
+        self.accrued_through = accrued_through
 
     async def _async_update_data(self) -> None:
-        """Recompute the active windows.
+        """Fold outstanding accrual into the ledger.
 
         Entities read the properties below, so there is nothing to return.
         """
+        self._fold_accrual()
         return None
 
     def async_set_windows(
@@ -114,32 +118,37 @@ class TariffCoordinator(DataUpdateCoordinator[None]):
         return self.base_supply_charge * self.gst.supply_charge_multiplier()
 
     @property
-    def billing_date(self) -> date:
-        """Return the day whose supply charge is currently in effect.
-
-        Until ``DAY_CHARGE_AFTER`` the previous day is still in effect, so the
-        charge for a day is applied once that day is under way rather than on the
-        boundary, where it would be recorded against the previous day.
-        """
-        now = dt_util.now()
-        if now.time() < DAY_CHARGE_AFTER:
-            return now.date() - timedelta(days=1)
-        return now.date()
-
-    @property
-    def days_billed(self) -> int:
-        """Return the number of days billed, counting the current day.
-
-        The setup day counts as day one even if the integration was added
-        partway through it, and the count never decreases.
-        """
-        return max(1, (self.billing_date - self.start_date).days + 1)
-
-    @property
     def supply_charge_total(self) -> float:
-        """Return the cumulative supply charge since setup.
+        """Return the supply charge accrued since setup.
 
-        Monotonically non-decreasing, which is what a cumulative (TOTAL)
-        statistic requires.
+        The charge accrues continuously at the current daily rate and past
+        accrual is never rewritten, so the value is monotonically non-decreasing
+        (for a non-negative charge), as a cumulative (TOTAL) statistic requires.
+        Changing the supply charge or tax settings only shapes accrual from the
+        moment of the change.
         """
-        return self.days_billed * self.supply_charge
+        elapsed = (dt_util.now(dt_util.UTC) - self.accrued_through).total_seconds()
+        return self.accrued_total + max(0.0, elapsed) / 86400.0 * self.supply_charge
+
+    def _fold_accrual(self) -> None:
+        """Fold the accrual accumulated since the last fold into the ledger."""
+        now = dt_util.now(dt_util.UTC)
+        elapsed = (now - self.accrued_through).total_seconds()
+        if elapsed <= 0:
+            # Clock skew, or a ledger persisted from the future: let it pass.
+            return
+        self.accrued_total += elapsed / 86400.0 * self.supply_charge
+        self.accrued_through = now
+        self._store.async_delay_save(self._store_data, SAVE_INTERVAL.total_seconds())
+
+    def _store_data(self) -> dict[str, Any]:
+        """Return the storable ledger."""
+        return {
+            "accrued_total": self.accrued_total,
+            "accrued_through": self.accrued_through.isoformat(),
+        }
+
+    async def async_flush_ledger(self) -> None:
+        """Fold outstanding accrual and flush the ledger to disk."""
+        self._fold_accrual()
+        await self._store.async_save(self._store_data())
