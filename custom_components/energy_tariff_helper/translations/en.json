@@ -3,9 +3,26 @@
     "step": {
       "user": {
         "title": "Energy Tariff Helper",
-        "description": "Name this meter. You'll add its tariff windows next.",
+        "description": "Name this meter — it names the device and its sensors.",
         "data": {
           "meter_name": "Meter name"
+        }
+      },
+      "pricing": {
+        "title": "Supply charge and tax",
+        "description": "The daily supply charge is a fixed amount billed per day, regardless of usage. Window rates are entered excluding tax; enable tax per component to report tax-inclusive values. Afterwards, add the tariff windows with the Add import window and Add export window buttons on the integration page.",
+        "data": {
+          "supply_charge": "Daily supply charge",
+          "gst_percent": "Tax rate",
+          "gst_import": "Add tax to import",
+          "gst_export": "Add tax to export",
+          "gst_supply_charge": "Add tax to supply charge"
+        },
+        "data_description": {
+          "gst_percent": "Applied only to the components enabled below. Australian GST is 10%.",
+          "gst_import": "Rates you enter for import windows are excluding tax.",
+          "gst_export": "Feed-in tariffs are often tax-free, so this is off by default.",
+          "gst_supply_charge": "The daily supply charge is normally taxed."
         }
       }
     },
@@ -43,7 +60,7 @@
       "step": {
         "user": {
           "title": "Add import window",
-          "description": "A recurring daily period when you pay this import rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight. If the end equals the start, the window covers the whole day.",
+          "description": "A daily period when you pay this import rate.",
           "data": {
             "start": "Start time",
             "end": "End time",
@@ -51,12 +68,12 @@
           },
           "data_description": {
             "start": "Inclusive \u2014 the window takes effect at this instant.",
-            "end": "Exclusive \u2014 the next window starts here. Use the next window's start time (23:00), not one second before it (22:59:59)."
+            "end": "Exclusive \u2014 the next window starts here; use the next window's start time (23:00), not one second before it (22:59:59). An end earlier than the start spans midnight. The same as start covers the whole day."
           }
         },
         "reconfigure": {
           "title": "Edit import window",
-          "description": "A recurring daily period when you pay this import rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight. If the end equals the start, the window covers the whole day.",
+          "description": "A daily period when you pay this import rate.",
           "data": {
             "start": "Start time",
             "end": "End time",
@@ -64,9 +81,12 @@
           },
           "data_description": {
             "start": "Inclusive \u2014 the window takes effect at this instant.",
-            "end": "Exclusive \u2014 the next window starts here. Use the next window's start time (23:00), not one second before it (22:59:59)."
+            "end": "Exclusive \u2014 the next window starts here; use the next window's start time (23:00), not one second before it (22:59:59). An end earlier than the start spans midnight. The same as start covers the whole day."
           }
         }
+      },
+      "error": {
+        "overlaps_existing": "This overlaps an existing window. Where windows overlap, the one with the later start time takes effect. Submit again to accept."
       }
     },
     "export_window": {
@@ -77,7 +97,7 @@
       "step": {
         "user": {
           "title": "Add export window",
-          "description": "A recurring daily period when you are paid this export rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight. If the end equals the start, the window covers the whole day.",
+          "description": "A daily period when you are paid this export rate.",
           "data": {
             "start": "Start time",
             "end": "End time",
@@ -85,12 +105,12 @@
           },
           "data_description": {
             "start": "Inclusive \u2014 the window takes effect at this instant.",
-            "end": "Exclusive \u2014 the next window starts here. Use the next window's start time (23:00), not one second before it (22:59:59)."
+            "end": "Exclusive \u2014 the next window starts here; use the next window's start time (23:00), not one second before it (22:59:59). An end earlier than the start spans midnight. The same as start covers the whole day."
           }
         },
         "reconfigure": {
           "title": "Edit export window",
-          "description": "A recurring daily period when you are paid this export rate. Start is inclusive, end is exclusive. If the end is earlier than the start, the window spans midnight. If the end equals the start, the window covers the whole day.",
+          "description": "A daily period when you are paid this export rate.",
           "data": {
             "start": "Start time",
             "end": "End time",
@@ -98,9 +118,12 @@
           },
           "data_description": {
             "start": "Inclusive \u2014 the window takes effect at this instant.",
-            "end": "Exclusive \u2014 the next window starts here. Use the next window's start time (23:00), not one second before it (22:59:59)."
+            "end": "Exclusive \u2014 the next window starts here; use the next window's start time (23:00), not one second before it (22:59:59). An end earlier than the start spans midnight. The same as start covers the whole day."
           }
         }
+      },
+      "error": {
+        "overlaps_existing": "This overlaps an existing window. Where windows overlap, the one with the later start time takes effect. Submit again to accept."
       }
     }
   },

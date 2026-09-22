@@ -53,15 +53,16 @@ directory and restart Home Assistant.
 ## Configure
 
 1. **Settings → Devices & Services → Add Integration → Energy Tariff Helper**.
-2. Give the meter a name (e.g. `Electricity`).
-3. On the integration page you get two sections of windows:
+2. Give the meter a name (e.g. `Electricity`) and set the daily supply charge
+   and tax.
+3. On the integration page, use **Add import window** / **Add export window**:
 
    - **Import window** — the periods and rates you pay to import.
    - **Export window** — the periods and rates you are paid to export.
 
-   Each section has an **Add** button, and every window row has edit and delete
-   buttons. Add as many as you need; changes apply immediately.
-4. **Configure** on the integration page sets:
+   Every window row has edit and delete buttons. Add as many as you need;
+   changes apply immediately.
+4. **Configure** on the integration page (also asked during setup) sets:
 
    - **Daily supply charge** — a fixed amount billed per day in `AUD/day`.
    - **Tax rate** — the percentage to apply (default 10%, Australian GST).
@@ -94,7 +95,9 @@ tariff and a flat feed-in tariff, or any other combination.
   so `23:00 → 07:00` covers 11pm through 7am the next morning.
 - If `start` and `end` are equal, the window covers the **whole day** — one
   window is all you need for a flat rate.
-- When windows overlap, the **earliest-listed** match wins.
+- When windows overlap, the window with the **most recent start time** wins —
+  so a short peak window can override the broader window around it. Creation
+  order never matters. Overlapping adds ask for confirmation.
 - If no window matches the current time, that direction's rate reads `0.0`.
 
 ## Use it in the Energy dashboard

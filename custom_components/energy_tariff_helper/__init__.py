@@ -35,6 +35,7 @@ from .const import (
     DEFAULT_GST_SUPPLY_CHARGE,
     DOMAIN,
     STORAGE_VERSION,
+    SUBENTRY_TITLE_PREFIX,
     SUBENTRY_TYPE_EXPORT,
     SUBENTRY_TYPE_IMPORT,
 )
@@ -135,7 +136,9 @@ def _migrate_windows_to_subentries(
                 ConfigSubentry(
                     data=MappingProxyType(window.as_dict()),
                     subentry_type=subentry_type,
-                    title=window.label,
+                    title=window.title(
+                        SUBENTRY_TITLE_PREFIX[subentry_type], hass.config.currency
+                    ),
                     unique_id=None,
                 ),
             )
@@ -177,10 +180,30 @@ def _seed_accrual(
     return days * charge, now
 
 
+def _normalize_subentry_titles(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Rewrite window titles to the current format.
+
+    Titles decide the row order on the integration page, so older formats are
+    upgraded in place (also picking up a changed Home Assistant currency).
+    """
+    currency = hass.config.currency
+    for subentry in entry.subentries.values():
+        window = window_from_dict(subentry.data)
+        if window is None:
+            continue
+        title = window.title(
+            SUBENTRY_TITLE_PREFIX.get(subentry.subentry_type, subentry.subentry_type),
+            currency,
+        )
+        if title != subentry.title:
+            hass.config_entries.async_update_subentry(entry, subentry, title=title)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Energy Tariff Helper from a config entry."""
     options = dict(entry.options)
     changed = _migrate_windows_to_subentries(hass, entry, options)
+    _normalize_subentry_titles(hass, entry)
 
     # Seed the accrual ledger before the setup date is stamped below: a fresh
     # meter starts at zero, an upgraded one is seeded from the 0.4.x formula.

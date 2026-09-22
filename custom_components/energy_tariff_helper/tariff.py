@@ -55,12 +55,18 @@ class TariffWindow:
             FIELD_RATE: self.rate,
         }
 
-    @property
-    def label(self) -> str:
-        """Return a short human label, used as the subentry title."""
-        if self.start == self.end:
-            return f"All day ({self.rate:g})"
-        return f"{self.start:%H:%M}-{self.end:%H:%M} ({self.rate:g})"
+    def title(self, direction: str, currency: str) -> str:
+        """Return the subentry title: direction, times and rate with unit.
+
+        Titles also set the row order on the integration page, so the direction
+        prefix groups each schedule together instead of interleaving them.
+        """
+        when = (
+            "all day"
+            if self.start == self.end
+            else f"{self.start:%H:%M}-{self.end:%H:%M}"
+        )
+        return f"{direction} {when} · {self.rate:g} {currency}/kWh"
 
 
 def _parse_time(value: Any) -> time:
@@ -197,13 +203,45 @@ def window_matches(window: TariffWindow, t: time) -> bool:
     return window.start <= t < window.end
 
 
+def _segments(window: TariffWindow) -> tuple[tuple[time, time], ...]:
+    """Return the window as one or two half-open intervals on the day."""
+    if window.start == window.end:
+        return ((time.min, time.max),)
+    if window.spans_midnight:
+        return ((window.start, time.max), (time.min, window.end))
+    return ((window.start, window.end),)
+
+
+def windows_overlap(a: TariffWindow, b: TariffWindow) -> bool:
+    """Return True if the two windows ever cover the same instant."""
+    return any(
+        sa < eb and sb < ea for sa, ea in _segments(a) for sb, eb in _segments(b)
+    )
+
+
+def _seconds_since(start: time, t: time) -> int:
+    """Return whole seconds from ``start`` to ``t``, wrapping over midnight."""
+    def to_seconds(x: time) -> int:
+        return x.hour * 3600 + x.minute * 60 + x.second
+
+    return (to_seconds(t) - to_seconds(start)) % 86400
+
+
 def active_window(windows: list[TariffWindow], t: time) -> TariffWindow | None:
     """Return the window in effect at ``t``.
 
-    When windows overlap the earliest-listed match wins. Returns ``None`` when
-    nothing matches; callers then fall back to the default rate.
+    When windows overlap, the one that started most recently wins, so a short
+    override window beats the broad window it sits inside of no matter what
+    order they were created in. Equal starts go to the earliest-listed window.
+    Returns ``None`` when nothing matches; callers then fall back to the
+    default rate.
     """
+    best: TariffWindow | None = None
+    best_age = 0
     for window in windows:
-        if window_matches(window, t):
-            return window
-    return None
+        if not window_matches(window, t):
+            continue
+        age = _seconds_since(window.start, t)
+        if best is None or age < best_age:
+            best, best_age = window, age
+    return best

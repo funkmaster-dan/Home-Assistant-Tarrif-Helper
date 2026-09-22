@@ -151,12 +151,14 @@ class TariffSensor(CoordinatorEntity[TariffCoordinator], SensorEntity):
 
     @property
     def _own_windows(self) -> list[TariffWindow]:
-        """Return the schedule belonging to this sensor's direction."""
+        """Return this sensor's schedule, ordered by start time."""
         if self.entity_description.direction == DIRECTION_IMPORT:
-            return self.coordinator.import_windows
-        if self.entity_description.direction == DIRECTION_EXPORT:
-            return self.coordinator.export_windows
-        return []
+            windows = self.coordinator.import_windows
+        elif self.entity_description.direction == DIRECTION_EXPORT:
+            windows = self.coordinator.export_windows
+        else:
+            return []
+        return sorted(windows, key=lambda window: window.start)
 
     @property
     def _own_active(self) -> TariffWindow | None:

@@ -67,6 +67,13 @@ SUBENTRY_TYPE_BY_DIRECTION: Final = {
     DIRECTION_EXPORT: SUBENTRY_TYPE_EXPORT,
 }
 
+# Display prefix for window titles. Subentry rows sort by title, so this also
+# groups each direction's schedule together on the integration page.
+SUBENTRY_TITLE_PREFIX: Final = {
+    SUBENTRY_TYPE_IMPORT: "Import",
+    SUBENTRY_TYPE_EXPORT: "Export",
+}
+
 # Default (fallback) rate when no window covers the current instant.
 # Deliberately 0.0 for both directions, so an unconfigured or misconfigured
 # schedule can never silently charge a non-zero rate.
